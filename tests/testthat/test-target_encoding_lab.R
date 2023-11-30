@@ -8,6 +8,7 @@ testthat::test_that("`target_encoding_lab()` works", {
     response = "vi_mean",
     predictors = "koppen_zone",
     encoding_methods = c("mean", "rank", "rnorm", "loo"),
+    smoothing = c(0, 30),
     rnorm_sd_multiplier = c(0, 0.1, 0.2),
     white_noise = c(0, 0.1, 0.2),
     verbose = FALSE

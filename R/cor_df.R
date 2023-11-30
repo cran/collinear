@@ -135,6 +135,9 @@ cor_df <- function(
   #join results
   cor.df <- cor.list |>
     dplyr::bind_rows() |>
+    dplyr::filter(
+      x != y
+    ) |>
     dplyr::arrange(
       dplyr::desc(abs(correlation))
     ) |>
@@ -201,9 +204,9 @@ cor_numerics <- function(
     ) |>
     #remove matrix diagonal
     dplyr::filter(
-      correlation < 1
+      x != y
     ) |>
-    #unique pair names to remove mirrored pairs
+    #remove mirrored pairs
     dplyr::rowwise() |>
     dplyr::mutate(
       pair_name = paste0(sort(c(x, y)), collapse = " ")

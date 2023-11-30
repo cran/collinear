@@ -1,3 +1,51 @@
+testthat::test_that("`f_rf_auc_unbalanced()` works", {
+  data(vi)
+  result <- f_rf_auc_unbalanced(x = "growing_season_length", y = "vi_binary", df = vi)
+  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
+  testthat::expect_true(result < 1, info = "Result should be a numeric value.")
+  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
+})
+
+testthat::test_that("`f_rf_auc_balanced()` works", {
+  data(vi)
+  result <- f_rf_auc_balanced(x = "growing_season_length", y = "vi_binary", df = vi)
+  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
+  testthat::expect_true(result < 1, info = "Result should be a numeric value.")
+  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
+})
+
+testthat::test_that("`f_gam_auc_unbalanced()` works", {
+  data(vi)
+  result <- f_gam_auc_unbalanced(x = "growing_season_length", y = "vi_binary", df = vi)
+  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
+  testthat::expect_true(result < 1, info = "Result should be a numeric value.")
+  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
+})
+
+testthat::test_that("`f_gam_auc_balanced()` works", {
+  data(vi)
+  result <- f_gam_auc_balanced(x = "growing_season_length", y = "vi_binary", df = vi)
+  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
+  testthat::expect_true(result < 1, info = "Result should be a numeric value.")
+  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
+})
+
+testthat::test_that("`f_logistic_auc_unbalanced()` works", {
+  data(vi)
+  result <- f_logistic_auc_unbalanced(x = "growing_season_length", y = "vi_binary", df = vi)
+  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
+  testthat::expect_true(result < 1, info = "Result should be a numeric value.")
+  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
+})
+
+testthat::test_that("`f_logistic_auc_balanced()` works", {
+  data(vi)
+  result <- f_logistic_auc_balanced(x = "growing_season_length", y = "vi_binary", df = vi)
+  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
+  testthat::expect_true(result < 1, info = "Result should be a numeric value.")
+  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
+})
+
 testthat::test_that("`f_gam_deviance()` works", {
   data(vi)
   result <- f_gam_deviance(x = "growing_season_length", y = "vi_mean", df = vi)
@@ -8,6 +56,13 @@ testthat::test_that("`f_gam_deviance()` works", {
 testthat::test_that("`f_rf_deviance()` works", {
   data(vi)
   result <- f_rf_deviance(x = "growing_season_length", y = "vi_mean", df = vi)
+  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
+  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
+})
+
+testthat::test_that("`f_rf_rsquared()` works", {
+  data(vi)
+  result <- f_rf_rsquared(x = "growing_season_length", y = "vi_mean", df = vi)
   testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
   testthat::expect_true(!is.na(result), info = "Result should not be NA.")
 })

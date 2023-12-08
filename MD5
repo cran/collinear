@@ -1,7 +1,7 @@
-bdfaae03a79071a970cb2e67246c1e66 *DESCRIPTION
+ee2f7b6bea087a740fff616c40280c3e *DESCRIPTION
 e42ecf8087f76d40ad3a2de89cb1085f *LICENSE
 25e98a5407fd14fd978f91847e9cd1d8 *NAMESPACE
-b98591517a0b1343ae602eb20d56d244 *NEWS.md
+26d93ef2e93cabab5144d8a5775543bb *NEWS.md
 cb177f8455f4244c9d7986da3213f4e7 *R/collinear.R
 25d1a7a47e742dd61fa9716b30a4965f *R/cor_df.R
 8f443895e867fb3d493ee38210ba5b29 *R/cor_matrix.R
@@ -16,9 +16,9 @@ d762171c3e49a717c643149b9f3992ad *R/preference_order.R
 5ee953d80f2bf03893db6b4d64320068 *R/target_encoding_lab.R
 749666334478921fe4524f77529531d1 *R/target_encoding_methods.R
 3b488e9084c01618d04d5729c0b55997 *R/validate.R
-9f8fed303638945a0ccc0692d0318c5a *R/vif_df.R
-8eaf6d5d75ddcac9ed4ee8f851ca8f63 *R/vif_select.R
-188bcbae4b38ceba66a4faa6c03fbb03 *README.md
+f02d17f234a5210cef266208c8bef7da *R/vif_df.R
+ba7a41405dabe069034b177071b34276 *R/vif_select.R
+206b0b3988afbe91150f0f5ac5603fcd *README.md
 8faf250d78a120ba4c7ea2186efddd24 *build/partial.rdb
 5194d5b011ed882c0d251fef61ae64e3 *data/toy.rda
 ecffa965723ff229af20a7ec5a4b6f73 *data/vi.rda
@@ -55,8 +55,8 @@ cbda3da475ac16f9badccbe4f38798af *man/validate_predictors.Rd
 319d58a52cd9cb9ec09c9cc29e005e5f *man/validate_response.Rd
 cd74b6b88c3fa4a1f6d508b02ceff044 *man/vi.Rd
 c466337bfafa9ad74d3b44f5c3d2d92e *man/vi_predictors.Rd
-e3463b7f340cf0b1312f511a700744ba *man/vif_df.Rd
-a20fd9afe732e797bd8850c3b839c97f *man/vif_select.Rd
+c68af6e73d2aa238082e635c510d4bb0 *man/vif_df.Rd
+17de6c2fe88fc496b051a4e8a73c4c5a *man/vif_select.Rd
 0622a97a2aaa3c342f09636052c2d7f5 *tests/spelling.R
 7441cb0dd72ed4624b03a636ff4237e7 *tests/testthat.R
 7dfdb2f0db4bfa56e9f59a85104a8432 *tests/testthat/test-auc_score.R
@@ -71,5 +71,5 @@ af5e530428b153968c4d48ed43b5e9a9 *tests/testthat/test-preference_order.R
 b62ee6ccef61aaca10ba71900ab62cb7 *tests/testthat/test-target_encoding_lab.R
 673158d92c08cd5fb11cd79fc8894573 *tests/testthat/test-target_encoding_methods.R
 c029415785fb74003a8f8e2d5a214c94 *tests/testthat/test-validate.R
-77b8e0c7a030a6d2cdfe69bf4e01c75d *tests/testthat/test-vif_df.R
-9b5bc14dc9a8ea1f4929025bad0eeb0b *tests/testthat/test-vif_select.R
+7e8ffeb9137631c25ca9b0bb19ca3d13 *tests/testthat/test-vif_df.R
+e68d446ebfb2f4d9dc2446b4df024d48 *tests/testthat/test-vif_select.R

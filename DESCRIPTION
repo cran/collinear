@@ -1,6 +1,6 @@
 Package: collinear
 Title: Seamless Multicollinearity Management
-Version: 1.1.0
+Version: 1.1.1
 Authors@R: 
     person(given = "Blas M.", 
           family = "Benito", , 
@@ -27,9 +27,9 @@ LazyData: true
 URL: https://blasbenito.github.io/collinear/
 Language: en-US
 NeedsCompilation: no
-Packaged: 2023-11-30 15:47:53 UTC; blas
+Packaged: 2023-12-07 19:44:28 UTC; blas
 Author: Blas M. Benito [aut, cre, cph]
     (<https://orcid.org/0000-0001-5105-7232>)
 Maintainer: Blas M. Benito <blasbenito@gmail.com>
 Repository: CRAN
-Date/Publication: 2023-11-30 16:10:13 UTC
+Date/Publication: 2023-12-08 08:50:02 UTC

@@ -2,144 +2,123 @@
 % Please edit documentation in R/cor_select.R
 \name{cor_select}
 \alias{cor_select}
-\title{Automated multicollinearity reduction via pairwise correlation}
+\title{Automated Multicollinearity Filtering with Pairwise Correlations}
 \usage{
 cor_select(
   df = NULL,
-  response = NULL,
   predictors = NULL,
   preference_order = NULL,
-  cor_method = "pearson",
   max_cor = 0.75,
-  encoding_method = "mean"
+  quiet = FALSE
 )
 }
 \arguments{
-\item{df}{(required; data frame) A data frame with numeric and/or character predictors predictors, and optionally, a response variable. Default: NULL.}
+\item{df}{(required; data frame, tibble, or sf) A data frame with responses and predictors. Default: NULL.}
 
-\item{response}{(recommended, character string) Name of a numeric response variable. Character response variables are ignored. Please, see 'Details' to better understand how providing this argument or not leads to different results when there are character variables in 'predictors'. Default: NULL.}
+\item{predictors}{(optional; character vector) Names of the predictors to select from \code{df}. If omitted, all numeric columns in \code{df} are used instead. If argument \code{response} is not provided, non-numeric variables are ignored. Default: NULL}
 
-\item{predictors}{(optional; character vector) Character vector with predictor names in 'df'. If omitted, all columns of 'df' are used as predictors. Default:'NULL'}
+\item{preference_order}{(optional; string, character vector, output of \code{\link[=preference_order]{preference_order()}}). Defines a priority order, from first to last, to preserve predictors during the selection process. Accepted inputs are:
+\itemize{
+\item \strong{"auto"} (default): if \code{response} is not NULL, calls \code{\link[=preference_order]{preference_order()}} for internal computation.
+\item \strong{character vector}: predictor names in a custom preference order.
+\item \strong{data frame}: output of \code{\link[=preference_order]{preference_order()}} from \code{response} of length one.
+\item \strong{named list}: output of \code{\link[=preference_order]{preference_order()}} from \code{response} of length two or more.
+\item \strong{NULL}: disabled.
+}. Default: "auto"}
 
-\item{preference_order}{(optional; character vector) vector with column names in 'predictors' in the desired preference order, or result of the function \code{\link[=preference_order]{preference_order()}}. Allows defining a priority order for selecting predictors, which can be particularly useful when some predictors are more critical for the analysis than others. Default: NULL (predictors ordered from lower to higher sum of absolute correlation with the other predictors).}
+\item{max_cor}{(optional; numeric) Maximum correlation allowed between any pair of variables in \code{predictors}. Recommended values are between 0.5 and 0.9. Higher values return larger number of predictors with a higher multicollinearity. If NULL, the pairwise correlation analysis is disabled. Default: \code{0.75}}
 
-\item{cor_method}{(optional; character string) Method used to compute pairwise correlations. Accepted methods are "pearson" (with a recommended minimum of 30 rows in 'df') or "spearman" (with a recommended minimum of 10 rows in 'df'). Default: "pearson".}
-
-\item{max_cor}{(optional; numeric) Maximum correlation allowed between any pair of predictors. Higher values return larger number of predictors with higher multicollinearity. Default: 0.75}
-
-\item{encoding_method}{(optional; character string). Name of the target encoding method to convert character and factor predictors to numeric. One of "mean", "rank", "loo", "rnorm" (see \code{\link[=target_encoding_lab]{target_encoding_lab()}} for further details). Default: "mean"}
+\item{quiet}{(optional; logical) If FALSE, messages generated during the execution of the function are printed to the console Default: FALSE}
 }
 \value{
-Character vector with the names of the selected predictors.
+\itemize{
+\item character vector if \code{response} is NULL or is a string.
+\item named list if \code{response} is a character vector.
+}
 }
 \description{
-Applies a recursive forward selection algorithm algorithm to select predictors with a bivariate correlation with any other predictor lower than a threshold defined by the argument \code{max_cor}.
+Implements a recursive forward selection algorithm to keep predictors with a maximum pairwise correlation with all other selected predictors lower than a given threshold. Uses \code{\link[=cor_df]{cor_df()}} underneath, and as such, can handle different combinations of predictor types.
 
-If the argument \code{response} is provided, all non-numeric variables in \code{predictors} are transformed into numeric using target encoding (see \code{\link[=target_encoding_lab]{target_encoding_lab()}}). Otherwise, non-numeric variables are ignored.
+Please check the section \strong{Pairwise Correlation Filtering} at the end of this help file for further details.
+}
+\section{Pairwise Correlation Filtering}{
 
-The argument \code{preference_order} allows defining a preference selection order to preserve (when possible) variables that might be interesting or even required for a given analysis. If NULL, predictors are ordered from lower to higher sum of their absolute pairwise correlation with the other predictors.
 
-For example, if \code{predictors} is \code{c("a", "b", "c")} and \code{preference_order} is \code{c("a", "b")}, there are two possibilities:
-\itemize{
-\item If the correlation between \code{"a"} and \code{"b"} is below \code{max_cor}, both variables are selected.
-\item If their correlation is equal or above \code{max_cor}, then \code{"a"} is selected, no matter its correlation with \code{"c"},
+The function \code{\link[=cor_select]{cor_select()}} applies a recursive forward selection algorithm to keep predictors with a maximum Pearson correlation with all other selected predictors lower than \code{max_cor}.
+
+If the argument \code{preference_order} is NULL, the predictors are ranked from lower to higher sum of absolute pairwise correlation with all other predictors.
+
+If \code{preference_order} is defined, whenever two or more variables are above \code{max_cor}, the one higher in \code{preference_order} is preserved. For example, for the predictors and preference order \eqn{a} and \eqn{b}, if their correlation is higher than \code{max_cor}, then \eqn{b} will be removed and \eqn{a} preserved. If their correlation is lower than \code{max_cor}, then both are preserved.
 }
 
-If \code{preference_order} is not provided, then the predictors are ranked by their variance inflation factor as computed by \code{vif_df()}.
-}
 \examples{
-
-data(
-  vi,
-  vi_predictors
-)
-
 #subset to limit example run time
-vi <- vi[1:1000, ]
-vi_predictors <- vi_predictors[1:10]
+df <- vi[1:1000, ]
 
-#without response
-#without preference_order
-#permissive max_cor
-selected.predictors <- cor_select(
-  df = vi,
-  predictors = vi_predictors,
-  max_cor = 0.8
+#only numeric predictors only to speed-up examples
+#categorical predictors are supported, but result in a slower analysis
+predictors <- vi_predictors_numeric[1:8]
+
+#predictors has mixed types
+sapply(
+  X = df[, predictors, drop = FALSE],
+  FUN = class
 )
 
-selected.predictors
-
-#without response
-#without preference_order
-#restrictive max_cor
-selected.predictors <- cor_select(
-  df = vi,
-  predictors = vi_predictors,
-  max_cor = 0.5
+#parallelization setup
+future::plan(
+  future::multisession,
+  workers = 2 #set to parallelly::availableCores() - 1
 )
 
-selected.predictors
+#progress bar
+# progressr::handlers(global = TRUE)
 
-#with response
-#without preference_order
-#restrictive max_cor
-#slightly different solution than previous one
-#because here target encoding is done against the response
-#while before was done pairwise against each numeric predictor
-selected.predictors <- cor_select(
-  df = vi,
-  response = "vi_mean",
-  predictors = vi_predictors,
-  max_cor = 0.5
+#without preference order
+x <- cor_select(
+  df = df,
+  predictors = predictors,
+  max_cor = 0.75
 )
 
-selected.predictors
 
-#with response
-#with user-defined preference_order
-#restrictive max_cor
-#numerics and categorical variables in output
-selected.predictors <- cor_select(
-  df = vi,
-  response = "vi_mean",
-  predictors = vi_predictors,
+#with custom preference order
+x <- cor_select(
+  df = df,
+  predictors = predictors,
   preference_order = c(
-    "soil_type", #categorical variable
-    "soil_temperature_mean",
     "swi_mean",
-    "rainfall_mean",
-    "evapotranspiration_mean"
+    "soil_type"
   ),
-  max_cor = 0.5
+  max_cor = 0.75
 )
 
-selected.predictors
 
-
-#with response
-#with automated preference_order
-#restrictive max_cor and max_vif
-#numerics and categorical variables in output
-preference.order <- preference_order(
-  df = vi,
-  response = "vi_mean",
-  predictors = vi_predictors,
-  f = f_rsquared #cor(response, predictor)
+#with automated preference order
+df_preference <- preference_order(
+  df = df,
+  response = "vi_numeric",
+  predictors = predictors
 )
 
-head(preference.order)
-
-selected.predictors <- cor_select(
-  df = vi,
-  response = "vi_mean",
-  predictors = vi_predictors,
-  preference_order = preference.order,
-  max_cor = 0.5
+x <- cor_select(
+  df = df,
+  predictors = predictors,
+  preference_order = df_preference,
+  max_cor = 0.75
 )
 
-selected.predictors
-
+#resetting to sequential processing
+future::plan(future::sequential)
+}
+\seealso{
+Other pairwise_correlation: 
+\code{\link{cor_clusters}()},
+\code{\link{cor_cramer_v}()},
+\code{\link{cor_df}()},
+\code{\link{cor_matrix}()}
 }
 \author{
-Blas M. Benito
+Blas M. Benito, PhD
 }
+\concept{pairwise_correlation}

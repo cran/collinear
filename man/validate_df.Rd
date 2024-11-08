@@ -2,29 +2,26 @@
 % Please edit documentation in R/validate.R
 \name{validate_df}
 \alias{validate_df}
-\title{Validate input data frame}
+\title{Validate Argument df}
 \usage{
-validate_df(df = NULL, min_rows = 30)
+validate_df(df = NULL, quiet = FALSE)
 }
 \arguments{
-\item{df}{(required; data frame or matrix) Input data frame. Default: NULL}
+\item{df}{(required; data frame, tibble, or sf) A data frame with responses and predictors. Default: NULL.}
 
-\item{min_rows}{(required; integer) Minimum number of rows required for a pairwise correlation or a variance inflation factor analysis. Default: 30}
+\item{quiet}{(optional; logical) If FALSE, messages generated during the execution of the function are printed to the console Default: FALSE}
 }
 \value{
-The input data frame modified to comply with the requirements of the functions in this package
+data frame
 }
 \description{
-Internal function to validate and prepare the input data frame for a multicollinearity analysis.
-
-Validates a data frame to ensure it complies with the requirements of the package functions. The function performs the following actions:
+Internal function to validate the argument \code{df} and ensure it complies with the requirements of the package functions. It performs the following actions:
 \itemize{
 \item Stops if 'df' is NULL.
 \item Stops if 'df' cannot be coerced to data frame.
 \item Stops if 'df' has zero rows.
 \item Removes geometry column if the input data frame is an "sf" object.
 \item Removes non-numeric columns with as many unique values as rows df has.
-\item Raise warning if number of rows of 'df' is lower than 'min_rows'.
 \item Converts logical columns to numeric.
 \item Converts factor and ordered columns to character.
 \item Tags the data frame with the attribute \code{validated = TRUE} to let the package functions skip the data validation.
@@ -41,8 +38,14 @@ vi <- validate_df(
 
 #tagged as validated
 attributes(vi)$validated
-
 }
-\author{
-Blas M. Benito
+\seealso{
+Other data_validation: 
+\code{\link{validate_data_cor}()},
+\code{\link{validate_data_vif}()},
+\code{\link{validate_encoding_arguments}()},
+\code{\link{validate_predictors}()},
+\code{\link{validate_preference_order}()},
+\code{\link{validate_response}()}
 }
+\concept{data_validation}

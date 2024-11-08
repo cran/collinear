@@ -2,148 +2,178 @@
 #'
 #' @description
 #'
-#' Computes the Variance Inflation Factor of all variables in a training data frame.
+#' Computes the Variance Inflation Factor of numeric variables in a data frame.
 #'
-#' Warning: predictors with perfect correlation might cause errors, please use [cor_select()] to remove perfect correlations first.
-#'
-#' The Variance Inflation Factor for a given variable `y` is computed as `1/(1-R2)`, where `R2` is the multiple R-squared of a multiple regression model fitted using `y` as response and all the remaining variables of the input data set as predictors. The equation can be interpreted as "the rate of perfect model's R-squared to the unexplained variance of this model".
-#'
-#' The possible range of VIF values is (1, Inf]. A VIF lower than 10 suggest that removing `y` from the data set would reduce overall multicollinearity.
-#'
-#' This function computes the Variance Inflation Factor (VIF) in two steps:
+#' This function computes the VIF (see section **Variance Inflation Factors** below) in two steps:
 #' \itemize{
-#'   \item Applies `\link[base]{solve}` to obtain the precision matrix, which is the inverse of the covariance matrix.
-#'   \item Uses `\link[base]{diag}` to extract the diagonal of the precision matrix, which contains the variance of the prediction of each predictor from all other predictors.
+#'   \item Applies [base::solve()] to obtain the precision matrix, which is the inverse of the covariance matrix between all variables in `predictors`.
+#'   \item Uses [base::diag()] to extract the diagonal of the precision matrix, which contains the variance of the prediction of each predictor from all other predictors, and represents the VIF.
 #' }
 #'
-#' @param df (required; data frame) A data frame with numeric and/or character predictors predictors, and optionally, a response variable. Default: NULL.
-#' @param response (recommended, character string) Name of a numeric response variable. Character response variables are ignored. Please, see 'Details' to better understand how providing this argument or not leads to different results when there are character variables in 'predictors'. Default: NULL.
-#' @param predictors (optional; character vector) character vector with predictor names in 'df'. If omitted, all columns of 'df' are used as predictors. Default:'NULL'
-#' @param encoding_method (optional; character string). Name of the target encoding method to convert character and factor predictors to numeric. One of "mean", "rank", "loo", "rnorm" (see [target_encoding_lab()] for further details). Default: "mean"
-#' @return Data frame with predictor names and VIF values
+#' @inheritSection collinear Variance Inflation Factors
+#'
+#' @inheritParams collinear
+#' @return data frame; predictors names their VIFs
 #'
 #' @examples
 #'
 #' data(
 #'   vi,
-#'   vi_predictors
+#'   vi_predictors_numeric
 #' )
 #'
-#' #subset to limit example run time
-#' vi <- vi[1:1000, ]
+#' #subset to limit run time
+#' df <- vi[1:1000, ]
 #'
-#' #reduce correlation in predictors with cor_select()
-#' vi_predictors <- cor_select(
-#'   df = vi,
-#'   response = "vi_mean",
-#'   predictors = vi_predictors,
-#'   max_cor = 0.75
+#' #apply pairwise correlation first
+#' selection <- cor_select(
+#'   df = df,
+#'   predictors = vi_predictors_numeric,
+#'   quiet = TRUE
 #' )
 #'
-#' #without response
-#' #only numeric predictors are returned
+#' #VIF data frame
 #' df <- vif_df(
-#'   df = vi,
-#'   predictors = vi_predictors
-#' )
-#'
-#' df
-#'
-#' #with response
-#' #categorical and numeric predictors are returned
-#' df <- vif_df(
-#'   df = vi,
-#'   response = "vi_mean",
-#'   predictors = vi_predictors
+#'   df = df,
+#'   predictors = selection
 #' )
 #'
 #' df
 #'
 #' @autoglobal
-#' @author Blas M. Benito
-#' \itemize{
-#'  \item David A. Belsley, D.A., Kuh, E., Welsch, R.E. (1980). Regression Diagnostics: Identifying Influential Data and Sources of Collinearity. John Wiley & Sons. \doi{10.1002/0471725153}.
-#' }
+#' @family vif
+#' @inherit vif_select references
 #' @export
 vif_df <- function(
     df = NULL,
-    response = NULL,
     predictors = NULL,
-    encoding_method = "mean"
+    quiet = FALSE
 ){
 
-  #check input data frame
-  df <- validate_df(
-    df = df,
-    min_rows = 30
-  )
+  if(!is.logical(quiet)){
+    message("\ncollinear::vif_df(): argument 'quiet' must be logical, resetting it to FALSE.")
+    quiet <- FALSE
+  }
 
-  #check predictors
-  predictors <- validate_predictors(
+  #internal function to compute VIF
+  #from correlation matrix
+  f_vif <- function(m = NULL){
+
+    if(capabilities("long.double") == TRUE){
+      tolerance <- 0
+    } else {
+      tolerance <- .Machine$double.eps
+    }
+
+    #compute VIF
+    df <- m |>
+      solve(tol = tolerance) |>
+      diag() |>
+      data.frame(stringsAsFactors = FALSE)
+
+    #format data frame
+    colnames(df) <- "vif"
+    df$vif <- round(abs(df$vif), 4)
+    df$predictor <- colnames(m)
+    rownames(df) <- NULL
+
+    #arrange by VIF
+    df[
+      order(
+        df$vif,
+        decreasing = TRUE
+        ),
+      c("predictor", "vif")
+    ]
+
+  }
+
+  #validate data dimensions
+  predictors <- validate_data_vif(
     df = df,
-    response = response,
     predictors = predictors,
-    min_numerics = 0
+    function_name = "collinear::vif_df()",
+    quiet = quiet
   )
 
-  #target encode character predictors
-  df <- target_encoding_lab(
-    df = df,
-    response = response,
-    predictors = predictors,
-    encoding_methods = encoding_method,
-    replace = TRUE,
-    verbose = FALSE
-  )
+  #if no numerics, return predictors
+  if(length(predictors) == 0){
+    if(quiet == FALSE){
+      message("\ncollinear::vif_df(): no numeric predictors available.")
+    }
+    return(
+      data.frame(
+        variable = NA,
+        vif = NA
+      )
+    )
+  }
 
-  #get numeric predictors only
-  predictors.numeric <- identify_numeric_predictors(
-    df = df,
-    predictors = predictors
-  )
+  if(length(predictors) == 1){
+    return(
+      data.frame(
+        variable = predictors,
+        vif = 0
+      )
+    )
+  }
 
   #compute correlation matrix
-  cor.matrix <- df[, predictors.numeric, drop = FALSE] |>
-    stats::cor(use = "complete.obs")
+  m <- stats::cor(
+    x = df[, predictors, drop = FALSE],
+    use = "complete.obs",
+    method = "pearson"
+  )
 
-  #look for perfect correlations that break solve()
-  #and replace them with 0.99 or -0.99
-  cor.matrix.range <- range(cor.matrix[upper.tri(cor.matrix)])
-  if(1 %in% cor.matrix.range){
-    cor.matrix[cor.matrix == 1] <- 0.999
-    diag(cor.matrix) <- 1
-  }
-  if(-1 %in% cor.matrix.range){
-    cor.matrix[cor.matrix == -1] <- -0.999
-  }
-
-  if(capabilities("long.double") == TRUE){
-    tolerance = 0
-  } else {
-    tolerance = .Machine$double.eps
-  }
-
-  #vif data frame
-  tryCatch(
-    {
-
-      vif.df <- cor.matrix |>
-        solve(tol = tolerance) |>
-        diag() |>
-        data.frame(stringsAsFactors = FALSE) |>
-        dplyr::rename(vif = 1) |>
-        dplyr::transmute(
-          variable = predictors.numeric,
-          vif = round(abs(vif), 3)
-        ) |>
-        dplyr::arrange(vif)
-
-      rownames(vif.df) <- NULL
-
-    }, error = function(e) {
-      stop("the VIF computation failed. Please use cor_df() or cor_select() to check and remove perfect correlations from df before the VIF assessment.")
+  #first try
+  vif.df <- tryCatch(
+    {f_vif(m = m)},
+    error = function(e) {
+      return(NA)
     }
   )
+
+  #second try
+  if(is.data.frame(vif.df) == FALSE){
+
+    vif.df <- tryCatch(
+      {
+
+        #look for perfect correlations that break solve()
+        #and replace them with 0.99 or -0.99
+        m.range <- range(
+          m[upper.tri(m)]
+          )
+
+        #maximum and minimum correlation
+        max.cor <- 0.9999999999
+        min.cor <- -max.cor
+
+        #replace values
+        if(max(m.range) > max.cor){
+          m[m > max.cor] <- max.cor
+          diag(m) <- 1
+        }
+
+        if(min(m.range) < min.cor){
+          m[m < min.cor] <- min.cor
+        }
+
+        #compute vif with the new matrix
+        f_vif(m = m)
+
+        },
+      error = function(e) {
+
+        stop(
+          "collinear::vif_df(): the correlation matrix is singular and cannot be solved.",
+          call. = FALSE
+          )
+
+      }
+    )
+
+  }
 
   vif.df
 

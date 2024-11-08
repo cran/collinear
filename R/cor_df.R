@@ -1,33 +1,20 @@
-#' Correlation data frame of numeric and character variables
+#' Pairwise Correlation Data Frame
 #'
-#' @description Returns a correlation data frame between all pairs of predictors in a training dataset. Non-numeric predictors are transformed into numeric via target encoding, using the 'response' variable as reference.
+#' @description
 #'
-#' @details
-#' This function attempts to handle correlations between pairs of variables that can be of different types:
+#' Computes a pairwise correlation data frame. Implements methods to compare different types of predictors:
 #' \itemize{
-#'   \item numeric vs. numeric: computed with stats::cor() with the methods "pearson" or "spearman".
-#'   \item numeric vs. character, two alternatives leading to different results:
-#'   \itemize{
-#'     \item 'response' is provided: the character variable is target-encoded as numeric using the values of the response as reference, and then its correlation with the numeric variable is computed with stats::cor(). This option generates a response-specific result suitable for training statistical and machine-learning models
-#'     \item 'response' is NULL (or the name of a non-numeric column): the character variable is target-encoded as numeric using the values of the numeric predictor (instead of the response) as reference, and then their correlation is computed with stats::cor(). This option leads to a response-agnostic result suitable for clustering problems.
+#'   \item **numeric vs. numeric**: as computed with [stats::cor()] using the methods "pearson" or "spearman", via [cor_numeric_vs_numeric()].
+#'   \item **numeric vs. categorical**: the function [cor_numeric_vs_categorical()] target-encodes the categorical variable using the numeric variable as reference with [target_encoding_lab()] and the method "loo" (leave-one-out), and then their correlation is computed with [stats::cor()].
+#'   \item **categorical vs. categorical**: the function [cor_categorical_vs_categorical()] computes Cramer's V (see [cor_cramer_v()]) as indicator of the association between character or factor variables. However, take in mind that Cramer's V is not directly comparable with R-squared, even when having the same range from zero to one. It is always recommended to target-encode categorical variables with [target_encoding_lab()] before the pairwise correlation analysis.
 #'   }
-#'   \item character vs. character, two alternatives leading to different results:
-#'   \itemize{
-#'     \item 'response' is provided: the character variables are target-encoded as numeric using the values of the response as reference, and then their correlation is computed with stats::cor().
-#'     \item response' is NULL (or the name of a non-numeric column): the association between the character variables is computed using Cramer's V. This option might be problematic, because R-squared values and Cramer's V, even when having the same range between 0 and 1, are not fully comparable.
-#'   }
-#' }
 #'
-#' @param df (required; data frame) A data frame with numeric and/or character predictors, and optionally, a response variable. Default: NULL.
-#' @param response (recommended, character string) Name of a numeric response variable. Character response variables are ignored. Please, see 'Details' to better understand how providing this argument or not leads to different results when there are character variables in 'predictors'. Default: NULL.
-#' @param predictors (optional; character vector) character vector with predictor names in 'df'. If omitted, all columns of 'df' are used as predictors. Default:'NULL'
-#' @param cor_method (optional; character string) Method used to compute pairwise correlations. Accepted methods are "pearson" (with a recommended minimum of 30 rows in 'df') or "spearman" (with a recommended minimum of 10 rows in 'df'). Default: "pearson".
-#' @param encoding_method (optional; character string). Name of the target encoding method to convert character and factor predictors to numeric. One of "mean", "rank", "loo", "rnorm" (see [target_encoding_lab()] for further details). Default: "mean"
+#' Accepts a parallelization setup via [future::plan()] and a progress bar via [progressr::handlers()] (see examples).
 #'
-#' @return data frame with pairs of predictors and their correlation.
+#' @inheritParams collinear
+#' @return data frame; pairwise correlation
 #'
 #' @examples
-#'
 #' data(
 #'   vi,
 #'   vi_predictors
@@ -35,118 +22,120 @@
 #'
 #' #reduce size of vi to speed-up example execution
 #' vi <- vi[1:1000, ]
+#'
+#' #mixed predictors
 #' vi_predictors <- vi_predictors[1:10]
 #'
-#' #without response
-#' #categorical vs categorical compared with cramer_v()
-#' #categorical vs numerical compared wit stats::cor() via target-encoding
-#' #numerical vs numerical compared with stats::cor()
+#' #parallelization setup
+#' future::plan(
+#'   future::multisession,
+#'   workers = 2 #set to parallelly::availableCores() - 1
+#' )
+#'
+#' #progress bar
+#' # progressr::handlers(global = TRUE)
+#'
+#' #correlation data frame
 #' df <- cor_df(
 #'   df = vi,
 #'   predictors = vi_predictors
 #' )
 #'
-#' head(df)
+#' df
 #'
-#' #with response
-#' #different solution than previous one
-#' #because target encoding is done against the response
-#' #rather than against the other numeric in the pair
-#' df <- cor_df(
-#'   df = vi,
-#'   response = "vi_mean",
-#'   predictors = vi_predictors
-#' )
-#'
-#' head(df)
+#' #disable parallelization
+#' future::plan(future::sequential)
 #'
 #' @autoglobal
-#' @author Blas M. Benito
+#' @family pairwise_correlation
 #' @export
 cor_df <- function(
     df = NULL,
-    response = NULL,
     predictors = NULL,
-    cor_method = "pearson",
-    encoding_method = "mean"
+    quiet = FALSE
 ){
 
-  #method argument for stats::cor
-  cor_method <- match.arg(
-    arg = cor_method,
-    choices = c(
-      "pearson",
-      "spearman"
-    ),
-    several.ok = FALSE
-  )
+  if(!is.logical(quiet)){
+    message("\ncollinear::cor_df(): argument 'quiet' must be logical, resetting it to FALSE.")
+    quiet <- FALSE
+  }
 
   #validate input data frame
-  df <- validate_df(
+  predictors <- validate_data_cor(
     df = df,
-    min_rows = ifelse(
-      test = cor_method == "pearson",
-      yes = 30,
-      no = 10
+    predictors = predictors,
+    function_name = "collinear::cor_df()",
+    quiet = quiet
+  )
+
+  #if no numerics, return predictors
+  if(length(predictors) == 0){
+    if(quiet == FALSE){
+      message("\ncollinear::cor_df(): no predictors provided, skipping correlation analysis.")
+    }
+    return(
+      data.frame(
+        variable = NA,
+        vif = NA
+      )
     )
-  )
+  }
 
-  #validate predictors
-  predictors <- validate_predictors(
-    df = df,
-    response = response,
-    predictors = predictors,
-    min_numerics = 0
-  )
-
-  #target encode character predictors
-  df <- target_encoding_lab(
-    df = df,
-    response = response,
-    predictors = predictors,
-    encoding_methods = encoding_method,
-    replace = TRUE,
-    verbose = FALSE
-  )
+  #early output if only one predictor
+  if(length(predictors) == 1){
+    if(quiet == FALSE){
+      message("\ncollinear::cor_df(): only one predictor provided, skipping correlation analysis.")
+    }
+    return(
+      data.frame(
+        x = predictors,
+        y = predictors,
+        correlation = 1.0
+      )
+    )
+  }
 
   #list to store correlation data frames
   cor.list <- list()
 
   #correlation between numeric variables
-  cor.list[["numerics"]] <- cor_numerics(
+  cor.list[["num-vs-num"]] <- cor_numeric_vs_numeric(
     df = df,
     predictors = predictors,
-    cor_method = cor_method
+    quiet = quiet
   )
 
   #correlation between numeric and character variables
-  cor.list[["num-char"]] <- cor_numerics_and_characters(
+  cor.list[["num-vs-cat"]] <- cor_numeric_vs_categorical(
     df = df,
     predictors = predictors,
-    cor_method = cor_method
+    quiet = quiet
   )
 
   #correlation between characters
-  cor.list[["char-char"]] <- cor_characters(
+  cor.list[["cat-vs-cat"]] <- cor_categorical_vs_categorical(
     df = df,
-    predictors = predictors
+    predictors = predictors,
+    quiet = quiet
   )
 
   #join results
-  cor.df <- cor.list |>
-    dplyr::bind_rows() |>
-    dplyr::filter(
-      x != y
-    ) |>
-    dplyr::arrange(
-      dplyr::desc(abs(correlation))
-    ) |>
-    dplyr::mutate(
-      correlation = round(
-        x = correlation,
-        digits = 3
-        )
-    )
+  cor.df <- do.call(
+    what = "rbind",
+    args = cor.list
+  )
+
+  #arrange by absolute correlation values
+  cor.df <- cor.df[
+    order(
+      abs(cor.df$correlation),
+      decreasing = TRUE
+    ),
+    , drop = FALSE
+  ]
+
+
+  rownames(cor.df) <- NULL
 
   cor.df
 
@@ -155,220 +144,283 @@ cor_df <- function(
 
 
 
-#' Correlation data frame between numeric variables
+#' Pairwise Correlation Between Numeric Variables
 #'
-#' @param df (required; data frame) A data frame Default: NULL.
-#' @param predictors (optional; character vector) character vector with predictor names in 'df'. Default:'NULL'
-#' @param cor_method (optional; charater string) Method used to compute pairwise correlations. Accepted methods are "pearson" (with a recommended minimum of 30 rows in 'df') or "spearman" (with a recommended minimum of 10 rows in 'df'). Default: "pearson".
-#' @return data frame
-#' @noRd
-#' @keywords internal
+#' @inheritParams collinear
+#' @inherit cor_df return
+#' @rdname cor_df
+#' @export
+#' @family pairwise_correlation
 #' @autoglobal
-cor_numerics <- function(
+cor_numeric_vs_numeric <- function(
     df = NULL,
     predictors = NULL,
-    cor_method = "pearson"
+    quiet = FALSE
 ){
 
-  #method argument for stats::cor
-  cor_method <- match.arg(
-    arg = cor_method,
-    choices = c(
-      "pearson",
-      "spearman"
-    ),
-    several.ok = FALSE
-  )
-
-  predictors.numeric <- identify_numeric_predictors(
-    df = df,
-    predictors = predictors
-  )
-
-  if(length(predictors.numeric) <= 1){
-    return(NULL)
-  }
-
-  cor.numerics <- stats::cor(
-    x = df[, predictors.numeric],
-    use = "pairwise.complete.obs",
-    method = cor_method
-  ) |>
-    #correlation matrix to data frame
-    as.table() |>
-    as.data.frame() |>
-    dplyr::transmute(
-      x = as.character(Var1),
-      y = as.character(Var2),
-      correlation = Freq
-    ) |>
-    #remove matrix diagonal
-    dplyr::filter(
-      x != y
-    ) |>
-    #remove mirrored pairs
-    dplyr::rowwise() |>
-    dplyr::mutate(
-      pair_name = paste0(sort(c(x, y)), collapse = " ")
-    ) |>
-    dplyr::ungroup() |>
-    dplyr::distinct(
-      pair_name,
-      .keep_all = TRUE
-    ) |>
-    dplyr::select(-pair_name)
-
-  cor.numerics
-
-}
-
-
-#' Correlation data frame between numeric and character variables
-#'
-#' @param df (required; data frame) A data frame Default: NULL.
-#' @param predictors (optional; character vector) character vector with predictor names in 'df'. Default:'NULL'
-#' @param cor_method (optional; charater string) Method used to compute pairwise correlations. Accepted methods are "pearson" (with a recommended minimum of 30 rows in 'df') or "spearman" (with a recommended minimum of 10 rows in 'df'). Default: "pearson".
-#' @param encoding_method (optional; character string). Name of the target encoding method to convert character and factor predictors to numeric. One of "mean", "rank", "loo", "rnorm" (see [target_encoding_lab()] for further details). Default: "mean"
-#'
-#' @return data frame
-#' @noRd
-#' @keywords internal
-#' @autoglobal
-cor_numerics_and_characters <- function(
-    df = NULL,
-    predictors = NULL,
-    cor_method = "pearson",
-    encoding_method = "mean"
-){
-
-  #check input data frame
+  #validate input data frame
   df <- validate_df(
     df = df,
-    min_rows = 30
+    quiet = quiet
   )
 
-  #check predictors
+  #validate predictors
+  #get numeric predictors only
   predictors <- validate_predictors(
     df = df,
-    response = response,
     predictors = predictors,
-    min_numerics = 0
+    quiet = quiet
   )
 
-  #method argument for stats::cor
-  cor_method <- match.arg(
-    arg = cor_method,
-    choices = c(
-      "pearson",
-      "spearman"
-    ),
-    several.ok = FALSE
-  )
-
-  predictors.numeric <- identify_numeric_predictors(
+  #identify numerics
+  predictors <- identify_predictors_numeric(
     df = df,
     predictors = predictors
   )
 
-  if(length(predictors.numeric) == 0){
+  if(length(predictors) <= 1){
     return(NULL)
   }
 
-  predictors.character <- identify_non_numeric_predictors(
-    df = df,
-    predictors = predictors
+  #correlation matrix to data frame
+  cor.df <- stats::cor(
+    x = df[, predictors, drop = FALSE],
+    use = "pairwise.complete.obs",
+    method = "pearson"
+  ) |>
+    as.table() |>
+    as.data.frame()
+
+  #remove factors
+  cor.df$Var1 <- as.character(cor.df$Var1)
+  cor.df$Var2 <- as.character(cor.df$Var2)
+
+  #rename columns
+  colnames(cor.df) <- c(
+    "x",
+    "y",
+    "correlation"
   )
 
-  if(length(predictors.character) == 0){
-    return(NULL)
-  }
+  #filter out x == y
+  cor.df <- cor.df[
+    cor.df$x != cor.df$y,
+    , drop = FALSE
+  ]
 
-  #data frame to store results
-  r.num.char <- expand.grid(
-    x = predictors.numeric,
-    y = predictors.character,
-    correlation = NA,
-    stringsAsFactors = FALSE
+  #identify pairs
+  cor.df$pair_name <- apply(
+    X = cor.df[, c("x", "y"), drop = FALSE],
+    MARGIN = 1,
+    FUN = function(x){
+      paste0(
+        sort(x),
+        collapse = " "
+      )
+    }
   )
 
-  #iterate to compute correlation
-  for(i in seq_len(nrow(r.num.char))){
+  #remove duplicated pairs
+  cor.df <- cor.df[
+    !duplicated(cor.df$pair_name),
+    , drop = FALSE
+  ]
 
-    #get response and predictor to a temp data frame
-    df.i <- data.frame(
-      x = df[[r.num.char$x[i]]],
-      y = df[[r.num.char$y[i]]]
-    ) |>
-      na.omit()
+  #remove pair name
+  cor.df$pair_name <- NULL
 
-    #target encode
-    df.i <- target_encoding_lab(
-      df = df.i,
-      response = "x",
-      predictors = "y",
-      encoding_methods = encoding_method,
-      replace = TRUE,
-      verbose = FALSE
-    )
-
-    #compute correlation
-    r.num.char$correlation[i] <- stats::cor(
-      x = df.i$x,
-      y = df.i$y,
-      method = cor_method,
-      use = "pairwise.complete.obs"
-    )
-
-  }
-
-  r.num.char
+  cor.df
 
 }
 
-#' Correlation data frame between character variables
+
+#' Pairwise Correlation Between Numeric and Categorical Variables
 #'
-#' @param df (required; data frame) A data frame Default: NULL.
-#' @param predictors (optional; character vector) character vector with predictor names in 'df'. Default:'NULL'
+#' @inheritParams collinear
 #'
-#' @return data frame
-#' @noRd
-#' @keywords internal
+#' @inherit cor_df return
+#' @rdname cor_df
+#' @export
+#' @family pairwise_correlation
 #' @autoglobal
-cor_characters <- function(
-    df,
-    predictors
+cor_numeric_vs_categorical <- function(
+    df = NULL,
+    predictors = NULL,
+    quiet = FALSE
 ){
 
-  predictors.character <- identify_non_numeric_predictors(
+  #validate input data frame
+  df <- validate_df(
+    df = df,
+    quiet = quiet
+  )
+
+  #validate predictors without losing non-numerics
+  #random response name to disable non-numeric filtering
+  predictors <- validate_predictors(
+    df = df,
+    response = paste0("x", Sys.time()),
+    predictors = predictors,
+    quiet = quiet
+  )
+
+  #identify numeric and categorical predictors
+  predictors <- identify_predictors(
     df = df,
     predictors = predictors
   )
 
   if(
-    length(predictors.character) <= 1
+    any(
+      length(predictors$numeric) == 0,
+      length(predictors$categorical) == 0
+    )
   ){
     return(NULL)
   }
 
   #data frame to store results
-  r.char.char <- expand.grid(
-    x = predictors.character,
-    y = predictors.character,
+  cor.df <- expand.grid(
+    x = predictors$numeric,
+    y = predictors$categorical,
+    stringsAsFactors = FALSE
+  )
+
+  #progress bar
+  p <- progressr::progressor(
+    steps = nrow(cor.df)
+  )
+
+  #parallelized version
+  cor.df$correlation <- future.apply::future_apply(
+    X = cor.df,
+    MARGIN = 1,
+    FUN = function(x){
+
+      #x <- c("topo_slope", "koppen_zone")
+
+      p()
+
+      df.x <- data.frame(
+        x = df[[x[1]]],
+        y = df[[x[2]]]
+      ) |>
+        na.omit()
+
+      #target encode
+      df.x <- target_encoding_lab(
+        df = df.x,
+        response = "x",
+        predictors = "y",
+        methods = "loo",
+        overwrite = TRUE,
+        quiet = TRUE
+      )
+
+      #compute correlation
+      stats::cor(
+        x = df.x$x,
+        y = df.x$y,
+        use = "pairwise.complete.obs",
+        method = "pearson"
+      )
+
+    }, #end of lambda function
+    future.seed = TRUE
+  )
+
+  cor.df
+
+}
+
+#' Pairwise Cramer's V Between Categorical Variables
+#'
+#' @inheritParams collinear
+#'
+#' @inherit cor_df return
+#' @rdname cor_df
+#' @export
+#' @family pairwise_correlation
+#' @autoglobal
+cor_categorical_vs_categorical <- function(
+    df = NULL,
+    predictors = NULL,
+    quiet = FALSE
+){
+
+  #validate input data frame
+  df <- validate_df(
+    df = df,
+    quiet = quiet
+  )
+
+  #validate predictors without losing non-numerics
+  #random response name to disable non-numeric filtering
+  predictors <- validate_predictors(
+    df = df,
+    response = paste0("x", Sys.time()),
+    predictors = predictors,
+    quiet = quiet
+  )
+
+  #get only categorical predictors
+  predictors <- identify_predictors_categorical(
+    df = df,
+    predictors = predictors
+  )
+
+  #empty output if no predictors
+  if(length(predictors) <= 1){
+    return(NULL)
+  }
+
+  #data frame to store results
+  cor.df <- expand.grid(
+    x = predictors,
+    y = predictors,
     correlation = NA,
     stringsAsFactors = FALSE
   )
 
-  #iterate to compute correlation
-  for(i in seq_len(nrow(r.char.char))){
+  #filter out mirrored pairs
+  cor.df <- within(cor.df, {
+    x <- ifelse(x < y, x, y)
+    y <- ifelse(x < y, y, x)
+  })
 
-    r.char.char$correlation[i] <- cramer_v(
-      x = df[[r.char.char$x[i]]],
-      y = df[[r.char.char$y[i]]],
-      check_input = FALSE
-    )
+  #filter out x == y
+  cor.df <- cor.df[cor.df$x != cor.df$y, ]
 
-  }
+  #future apply
+  #progress bar
+  p <- progressr::progressor(
+    steps = nrow(cor.df)
+  )
 
-  r.char.char
+  #parallelized version
+  cor.df$correlation <- future.apply::future_apply(
+    X = cor.df,
+    MARGIN = 1,
+    FUN = function(x){
+
+      p()
+
+      df.x <- data.frame(
+        x = df[[x[1]]],
+        y = df[[x[2]]]
+      ) |>
+        na.omit()
+
+      cor_cramer_v(
+        x = df.x$x,
+        y = df.x$y,
+        check_input = FALSE
+      )
+
+    },
+    future.seed = TRUE
+  )
+
+  cor.df
 
 }

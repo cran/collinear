@@ -1,100 +1,69 @@
 testthat::test_that("`target_encoding_methods()` works", {
 
-  data(vi)
+  df <- vi[1:1000, ]
 
   #target_encoding_mean
+  df <- target_encoding_mean(
+    df = df,
+    response = "vi_numeric",
+    predictor = "soil_type",
+    encoded_name = "new_column_1",
+    smoothing = 0
+  )
+
   testthat::expect_true(
-    is.character(vi$soil_type)
+    class(vi[["soil_type"]]) == "factor"
+  )
+
+  testthat::expect_true(
+    class(df[["new_column_1"]]) == "numeric"
   )
 
   df <- target_encoding_mean(
-    df = vi,
-    response = "vi_mean",
+    df = df,
+    response = "vi_numeric",
     predictor = "soil_type",
-    smoothing = 0,
-    white_noise = 0.1,
-    replace = FALSE,
-    verbose = FALSE
+    encoded_name = "new_column_2",
+    smoothing = 30
   )
 
   testthat::expect_true(
-    "soil_type__encoded_mean__noise_0.1" %in% names(df)
+    class(df[["new_column_2"]]) == "numeric"
   )
 
   testthat::expect_true(
-    is.numeric(df$soil_type__encoded_mean__noise_0.1)
+    cor(df$new_column_1, df$new_column_2) < 1
   )
 
-  df <- target_encoding_mean(
-    df = vi,
-    response = "vi_mean",
-    predictor = "soil_type",
-    smoothing = 30,
-    white_noise = 0.1,
-    replace = FALSE,
-    verbose = FALSE
-  )
 
-  testthat::expect_true(
-    "soil_type__encoded_mean__smoothing_30__noise_0.1" %in% names(df)
-  )
-
-  testthat::expect_true(
-    is.numeric(df$soil_type__encoded_mean__smoothing_30__noise_0.1)
-  )
-
-  #target_encoding_rank
+  #rank
   df <- target_encoding_rank(
-    df = vi,
-    response = "vi_mean",
+    df = df,
+    response = "vi_numeric",
     predictor = "soil_type",
-    replace = FALSE,
-    verbose = FALSE
+    encoded_name = "new_column_3",
+    smoothing = 0
   )
 
   testthat::expect_true(
-    "soil_type__encoded_rank" %in% names(df)
+    class(df[["new_column_3"]]) == "integer"
   )
 
-  testthat::expect_true(
-    is.numeric(df$soil_type__encoded_rank)
-  )
-
-
-  #target_encoding_loo
+  #loo
   df <- target_encoding_loo(
-    df = vi,
-    response = "vi_mean",
+    df = df,
+    response = "vi_numeric",
     predictor = "soil_type",
-    white_noise = 0.1,
-    replace = FALSE,
-    verbose = FALSE
+    encoded_name = "new_column_4",
+    smoothing = 0
   )
 
   testthat::expect_true(
-    "soil_type__encoded_loo__noise_0.1" %in% names(df)
+    class(df[["new_column_4"]]) == "numeric"
   )
 
   testthat::expect_true(
-    is.numeric(df$soil_type__encoded_loo__noise_0.1)
-  )
-
-  #target_encoding_rnorm
-  df <- target_encoding_rnorm(
-    df = vi,
-    response = "vi_mean",
-    predictor = "soil_type",
-    rnorm_sd_multiplier = 0.1,
-    replace = FALSE,
-    verbose = FALSE
-  )
-
-  testthat::expect_true(
-    "soil_type__encoded_rnorm__sd_multiplier_0.1" %in% names(df)
-  )
-
-  testthat::expect_true(
-    is.numeric(df$soil_type__encoded_rnorm__sd_multiplier_0.1)
+    cor(df$new_column_3, df$new_column_4) < 1
   )
 
 

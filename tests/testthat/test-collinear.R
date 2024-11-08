@@ -1,127 +1,316 @@
 testthat::test_that("`collinear()` works", {
 
-    data(vi, vi_predictors)
+  data(vi, vi_predictors)
 
-    vi <- vi[1:1000, ]
+  predictors <- vi_predictors[1:20]
+  df <- vi[1:1000, ]
 
-    #without response, only numeric predictors processed
-    ####################################################
+  # several responses ----
+  responses <- c(
+    "vi_numeric",
+    "vi_counts",
+    "vi_binomial",
+    "vi_categorical",
+    "vi_factor"
+  )
 
-    #permissive selection
-    selected.predictors.1 <- collinear(
-      df = vi,
-      predictors = vi_predictors,
-      max_cor = 0.8,
-      max_vif = 10
+  #external preference order
+  preference_list <- preference_order(
+    df = df,
+    response = responses,
+    predictors = predictors,
+    f = NULL,
+    warn_limit = NULL,
+    quiet = TRUE
+  )
+
+  x <- collinear(
+    df = df,
+    response = responses,
+    predictors = predictors,
+    preference_order = preference_list,
+    quiet = TRUE
+  )
+
+  testthat::expect_true(
+    is.list(x)
+  )
+
+  testthat::expect_true(
+    all(names(x) %in% responses)
+  )
+
+  #preference order auto
+  #should give the same results, but somehow it does not
+  y <- collinear(
+    df = df,
+    response = responses,
+    predictors = predictors,
+    preference_order = "auto",
+    quiet = TRUE
+  )
+
+  testthat::expect_true(
+    is.list(y)
+  )
+
+  testthat::expect_true(
+    all(names(y) %in% responses)
+  )
+
+
+  # mixed types ----
+  x <- collinear(
+    df = df,
+    predictors = predictors,
+    quiet = TRUE
+  )
+
+  testthat::expect_true(
+    is.character(x)
+  )
+
+  testthat::expect_true(
+    all(x %in% predictors)
+  )
+
+  testthat::expect_true(
+    length(predictors) > length(x)
+  )
+
+  #custom preference order
+  preference_order <- c(
+    "swi_mean",
+    "topo_elevation"
+  )
+
+  x <- collinear(
+    df = df,
+    predictors = predictors,
+    preference_order = preference_order,
+    quiet = TRUE
+  )
+
+  testthat::expect_true(
+    is.character(x)
+  )
+
+  testthat::expect_true(
+    all(x %in% predictors)
+  )
+
+  testthat::expect_true(
+    length(predictors) > length(x)
+  )
+
+  testthat::expect_true(
+    all(preference_order[1] == x[1])
+  )
+
+  #automated preference order
+  preference_order <- preference_order(
+    df = df,
+    response = "vi_numeric",
+    predictors = predictors,
+    warn_limit = NULL,
+    quiet = TRUE
+  )
+
+  x <- collinear(
+    df = df,
+    predictors = predictors,
+    preference_order = preference_order,
+    quiet = TRUE
+  )
+
+  testthat::expect_true(
+    is.character(x)
+  )
+
+  testthat::expect_true(
+    all(x %in% predictors)
+  )
+
+  testthat::expect_true(
+    length(predictors) > length(x)
+  )
+
+  testthat::expect_true(
+    all(preference_order$predictor[1] == x[1])
+  )
+
+  #internal preference order
+  testthat::expect_message(
+    x <- collinear(
+      df = df,
+      response = "vi_numeric",
+      predictors = predictors,
+      quiet = FALSE
     )
+  ) |>
+    suppressMessages()
 
-    #restrictive selection
-    selected.predictors.2 <- collinear(
-      df = vi,
-      predictors = vi_predictors,
-      max_cor = 0.5,
-      max_vif = 2.5
+  testthat::expect_true(
+    is.character(x)
+  )
+
+  testthat::expect_true(
+    all(x %in% predictors)
+  )
+
+  testthat::expect_true(
+    length(predictors) > length(x)
+  )
+
+  #disabling vif and target encoding
+  predictors <- vi_predictors[1:10]
+
+  testthat::expect_message(
+    x <- collinear(
+      df = df,
+      response = "vi_numeric",
+      predictors = predictors,
+      encoding_method = NULL,
+      max_vif = NULL,
+      quiet = FALSE
     )
+  ) |>
+    suppressMessages()
 
-    #basic tests
-    testthat::expect_true(
-      is.vector(selected.predictors.1)
+  testthat::expect_message(
+    y <- cor_select(
+      df = df,
+      predictors = predictors,
+      preference_order = preference_order(
+        df = df,
+        response = "vi_numeric",
+        predictors = predictors,
+        warn_limit = NULL
+      ),
+      quiet = FALSE
     )
+  ) |>
+    suppressMessages()
 
-    testthat::expect_true(
-      is.vector(selected.predictors.2)
+  testthat::expect_true(
+    all(x == y)
+  )
+
+  #disabling cor and target encoding
+  predictors <- vi_predictors_numeric[1:10]
+
+  preference_order <- preference_order(
+    df = df,
+    response = "vi_numeric",
+    predictors = predictors
+  ) |>
+    suppressMessages()
+
+  testthat::expect_message(
+    x <- collinear(
+      df = df,
+      response = "vi_numeric",
+      predictors = predictors,
+      preference_order = preference_order,
+      encoding_method = NULL,
+      max_cor = NULL,
+      quiet = FALSE
     )
+  ) |>
+    suppressMessages()
 
-    testthat::expect_true(
-      length(selected.predictors.1) > 0
+  testthat::expect_message(
+    y <- vif_select(
+      df = df,
+      predictors = predictors,
+      preference_order = preference_order,
+      quiet = FALSE
     )
+  ) |>
+    suppressMessages()
 
-    testthat::expect_true(
-      length(selected.predictors.2) > 0
+  testthat::expect_true(
+    all(x == y)
+  )
+
+  # categorical only ----
+  predictors <- vi_predictors_categorical[1:5]
+
+  testthat::expect_message(
+    x <- collinear(
+      df = df,
+      response = "vi_factor",
+      predictors = predictors,
+      quiet = FALSE
     )
+  ) |>
+    suppressMessages()
 
-    testthat::expect_true(
-      length(selected.predictors.1) > length(selected.predictors.2)
+  testthat::expect_true(
+    is.character(x)
+  )
+
+  testthat::expect_true(
+    all(x %in% predictors)
+  )
+
+  testthat::expect_true(
+    length(predictors) > length(x)
+  )
+
+
+  # edge cases ----
+
+  #no df
+  testthat::expect_error(
+    x <- collinear(
+      df = NULL,
+      predictors = NULL
     )
+  )
 
-    #advanced test
-    non.numeric.predictors <- identify_non_numeric_predictors(
-      df = vi,
+  #predictors only
+  testthat::expect_error(
+    x <- collinear(
+      df = NULL,
       predictors = vi_predictors
     )
+  )
 
-    testthat::expect_true(
-      !all(non.numeric.predictors %in% selected.predictors.1)
-    )
-
-    testthat::expect_true(
-      !all(non.numeric.predictors %in% selected.predictors.2)
-    )
-
-    #with response, numerics and non numerics processed
-    ######################################################
-
-    selected.predictors <- collinear(
-      df = vi,
-      response = "vi_mean",
+  #few rows
+  testthat::expect_error(
+    x <- collinear(
+      df = vi[1, ],
       predictors = vi_predictors,
-      max_cor = 0.8,
-      max_vif = 10
+      quiet = TRUE
     )
+  )
 
-    testthat::expect_true(
-      is.vector(selected.predictors)
+  #no predictors
+  x <- collinear(
+    df = df[, 1:5],
+    predictors = NULL,
+    quiet = TRUE
+  )
+
+  testthat::expect_true(
+    all(x %in% colnames(df)[1:5])
+  )
+
+  #single predictor
+  predictors <- vi_predictors_numeric[1]
+
+  testthat::expect_message(
+    x <- collinear(
+      df = vi[1:1000, ],
+      predictors = predictors
     )
+  ) |>
+    suppressMessages()
 
-    testthat::expect_true(
-      length(selected.predictors) > 0
-    )
 
-    #check that there are non-numerics selected
-    testthat::expect_true(
-      sum(non.numeric.predictors %in% selected.predictors) > 0
-    )
-
-    #with response and preference order
-    ######################################################
-
-    selected.predictors <- collinear(
-      df = vi,
-      response = "vi_mean",
-      predictors = vi_predictors,
-      preference_order = c(
-        "soil_temperature_mean",
-        "swi_mean",
-        "rainfall_mean",
-        "soil_nitrogen"
-      ),
-      max_cor = 0.8,
-      max_vif = 10
-    )
-
-    testthat::expect_true(
-      is.vector(selected.predictors)
-    )
-
-    testthat::expect_true(
-      length(selected.predictors) > 0
-    )
-
-    testthat::expect_true(
-      "soil_temperature_mean" %in% selected.predictors
-    )
-
-    testthat::expect_true(
-      "swi_mean" %in% selected.predictors
-    )
-
-    testthat::expect_true(
-      "rainfall_mean" %in% selected.predictors
-    )
-
-    testthat::expect_true(
-      "soil_nitrogen" %in% selected.predictors
-    )
-
+  testthat::expect_true(
+    x == predictors
+  )
 
 })

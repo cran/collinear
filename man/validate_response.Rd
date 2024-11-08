@@ -2,22 +2,22 @@
 % Please edit documentation in R/validate.R
 \name{validate_response}
 \alias{validate_response}
-\title{Validate the 'response' argument for target encoding of non-numeric variables}
+\title{Validate Argument response}
 \usage{
-validate_response(df = NULL, response = NULL, decimals = 4)
+validate_response(df = NULL, response = NULL, quiet = FALSE)
 }
 \arguments{
-\item{df}{(required; data frame) A validated data frame with numeric and/or character predictors predictors, and optionally, a response variable. Default: NULL.}
+\item{df}{(required; data frame, tibble, or sf) A data frame with responses and predictors. Default: NULL.}
 
-\item{response}{(optional, character string) Name of a numeric response variable. Character response variables are ignored. Default: NULL.}
+\item{response}{(optional; character string or vector) Name/s of response variable/s in \code{df}. Used in target encoding when it names a numeric variable and there are categorical predictors, and to compute preference order. Default: NULL.}
 
-\item{decimals}{(required, integer) number of decimal places for the zero variance test. Default: 4}
+\item{quiet}{(optional; logical) If FALSE, messages generated during the execution of the function are printed to the console Default: FALSE}
 }
 \value{
-character string with name of the response
+character string: response name
 }
 \description{
-Requires the argument 'df' to be validated with \code{\link[=validate_df]{validate_df()}}.
+Internal function to validate the argument \code{response}. Requires the argument 'df' to be validated with \code{\link[=validate_df]{validate_df()}}.
 }
 \examples{
 
@@ -33,13 +33,20 @@ vi <- validate_df(
 #validating example predictors
 response <- validate_response(
   df = vi,
-  response = "vi_mean"
+  response = "vi_numeric"
 )
 
 #tagged as validated
 attributes(response)$validated
 
 }
-\author{
-Blas M. Benito
+\seealso{
+Other data_validation: 
+\code{\link{validate_data_cor}()},
+\code{\link{validate_data_vif}()},
+\code{\link{validate_df}()},
+\code{\link{validate_encoding_arguments}()},
+\code{\link{validate_predictors}()},
+\code{\link{validate_preference_order}()}
 }
+\concept{data_validation}

@@ -4,76 +4,70 @@
 \alias{vif_df}
 \title{Variance Inflation Factor}
 \usage{
-vif_df(df = NULL, response = NULL, predictors = NULL, encoding_method = "mean")
+vif_df(df = NULL, predictors = NULL, quiet = FALSE)
 }
 \arguments{
-\item{df}{(required; data frame) A data frame with numeric and/or character predictors predictors, and optionally, a response variable. Default: NULL.}
+\item{df}{(required; data frame, tibble, or sf) A data frame with responses and predictors. Default: NULL.}
 
-\item{response}{(recommended, character string) Name of a numeric response variable. Character response variables are ignored. Please, see 'Details' to better understand how providing this argument or not leads to different results when there are character variables in 'predictors'. Default: NULL.}
+\item{predictors}{(optional; character vector) Names of the predictors to select from \code{df}. If omitted, all numeric columns in \code{df} are used instead. If argument \code{response} is not provided, non-numeric variables are ignored. Default: NULL}
 
-\item{predictors}{(optional; character vector) character vector with predictor names in 'df'. If omitted, all columns of 'df' are used as predictors. Default:'NULL'}
-
-\item{encoding_method}{(optional; character string). Name of the target encoding method to convert character and factor predictors to numeric. One of "mean", "rank", "loo", "rnorm" (see \code{\link[=target_encoding_lab]{target_encoding_lab()}} for further details). Default: "mean"}
+\item{quiet}{(optional; logical) If FALSE, messages generated during the execution of the function are printed to the console Default: FALSE}
 }
 \value{
-Data frame with predictor names and VIF values
+data frame; predictors names their VIFs
 }
 \description{
-Computes the Variance Inflation Factor of all variables in a training data frame.
+Computes the Variance Inflation Factor of numeric variables in a data frame.
 
-Warning: predictors with perfect correlation might cause errors, please use \code{\link[=cor_select]{cor_select()}} to remove perfect correlations first.
-
-The Variance Inflation Factor for a given variable \code{y} is computed as \code{1/(1-R2)}, where \code{R2} is the multiple R-squared of a multiple regression model fitted using \code{y} as response and all the remaining variables of the input data set as predictors. The equation can be interpreted as "the rate of perfect model's R-squared to the unexplained variance of this model".
-
-The possible range of VIF values is (1, Inf]. A VIF lower than 10 suggest that removing \code{y} from the data set would reduce overall multicollinearity.
-
-This function computes the Variance Inflation Factor (VIF) in two steps:
+This function computes the VIF (see section \strong{Variance Inflation Factors} below) in two steps:
 \itemize{
-\item Applies \verb{\link[base]\{solve\}} to obtain the precision matrix, which is the inverse of the covariance matrix.
-\item Uses \verb{\link[base]\{diag\}} to extract the diagonal of the precision matrix, which contains the variance of the prediction of each predictor from all other predictors.
+\item Applies \code{\link[base:solve]{base::solve()}} to obtain the precision matrix, which is the inverse of the covariance matrix between all variables in \code{predictors}.
+\item Uses \code{\link[base:diag]{base::diag()}} to extract the diagonal of the precision matrix, which contains the variance of the prediction of each predictor from all other predictors, and represents the VIF.
 }
 }
+\section{Variance Inflation Factors}{
+
+
+The Variance Inflation Factor for a given variable \eqn{a} is computed as \eqn{1/(1-R2)}, where \eqn{R2} is the multiple R-squared of a multiple regression model fitted using \eqn{a} as response and all other predictors in the input data frame as predictors, as in  \eqn{a = b + c + ...}.
+
+The square root of the VIF of \eqn{a} is the factor by which the confidence interval of the estimate for \eqn{a} in the linear model \eqn{y = a + b + c + ...}` is widened by multicollinearity in the model predictors.
+
+The range of VIF values is (1, Inf]. The recommended thresholds for maximum VIF may vary depending on the source consulted, being the most common values, 2.5, 5, and 10.
+}
+
 \examples{
 
 data(
   vi,
-  vi_predictors
+  vi_predictors_numeric
 )
 
-#subset to limit example run time
-vi <- vi[1:1000, ]
+#subset to limit run time
+df <- vi[1:1000, ]
 
-#reduce correlation in predictors with cor_select()
-vi_predictors <- cor_select(
-  df = vi,
-  response = "vi_mean",
-  predictors = vi_predictors,
-  max_cor = 0.75
+#apply pairwise correlation first
+selection <- cor_select(
+  df = df,
+  predictors = vi_predictors_numeric,
+  quiet = TRUE
 )
 
-#without response
-#only numeric predictors are returned
+#VIF data frame
 df <- vif_df(
-  df = vi,
-  predictors = vi_predictors
-)
-
-df
-
-#with response
-#categorical and numeric predictors are returned
-df <- vif_df(
-  df = vi,
-  response = "vi_mean",
-  predictors = vi_predictors
+  df = df,
+  predictors = selection
 )
 
 df
 
 }
-\author{
-Blas M. Benito
+\references{
 \itemize{
-\item David A. Belsley, D.A., Kuh, E., Welsch, R.E. (1980). Regression Diagnostics: Identifying Influential Data and Sources of Collinearity. John Wiley & Sons. \doi{10.1002/0471725153}.
+\item David A. Belsley, D.A., Kuh, E., Welsch, R.E. (1980). Regression Diagnostics: Identifying Influential Data and Sources of Collinearity. John Wiley & Sons. DOI: 10.1002/0471725153.
 }
 }
+\seealso{
+Other vif: 
+\code{\link{vif_select}()}
+}
+\concept{vif}

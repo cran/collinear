@@ -2,62 +2,61 @@
 % Please edit documentation in R/target_encoding_lab.R
 \name{target_encoding_lab}
 \alias{target_encoding_lab}
-\title{Target encoding of non-numeric variables}
+\title{Target Encoding Lab: Transform Categorical Variables to Numeric}
 \usage{
 target_encoding_lab(
   df = NULL,
   response = NULL,
   predictors = NULL,
-  encoding_methods = c("mean", "rank", "loo", "rnorm"),
+  methods = c("loo", "mean", "rank"),
   smoothing = 0,
-  rnorm_sd_multiplier = 0,
-  seed = 1,
   white_noise = 0,
-  replace = FALSE,
-  verbose = TRUE
+  seed = 0,
+  overwrite = FALSE,
+  quiet = FALSE
 )
 }
 \arguments{
-\item{df}{(required; data frame, tibble, or sf) A training data frame. Default: NULL}
+\item{df}{(required; data frame, tibble, or sf) A data frame with responses and predictors. Default: NULL.}
 
-\item{response}{(required; character string) Name of the response. Must be a column name of \code{df}. Default: NULL}
+\item{response}{(optional, character string) Name of a numeric response variable in \code{df}. Default: NULL.}
 
-\item{predictors}{(required; character vector) Names of all the predictors in \code{df}. Only character and factor predictors are processed, but all are returned in the "df" slot of the function's output.  Default: NULL}
+\item{predictors}{(optional; character vector) Names of the predictors to select from \code{df}. If omitted, all numeric columns in \code{df} are used instead. If argument \code{response} is not provided, non-numeric variables are ignored. Default: NULL}
 
-\item{encoding_methods}{(optional; character string or vector). Name of the target encoding methods. Default: c("mean", "mean_smoothing, "rank", "loo", "rnorm")}
+\item{methods}{(optional; character vector or NULL). Name of the target encoding methods. If NULL, target encoding is ignored, and \code{df} is returned with no modification. Default: c("loo", "mean", "rank")}
 
-\item{smoothing}{(optional; numeric) Argument of \code{\link[=target_encoding_mean]{target_encoding_mean()}} (method "mean_smoothing"). Minimum group size that keeps the mean of the group. Groups smaller than this have their means pulled towards the global mean of the response. Default: 0}
+\item{smoothing}{(optional; integer vector) Argument of the method "mean". Groups smaller than this number have their means pulled towards the mean of the response across all cases. Default: 0}
 
-\item{rnorm_sd_multiplier}{(optional; numeric) Numeric with multiplier of the standard deviation of each group in the categorical variable, in the range 0-1. Controls the variability in the encoded variables to mitigate potential overfitting. Default: \code{1}}
+\item{white_noise}{(optional; numeric vector) Argument of the methods "mean", "rank", and "loo". Maximum white noise to add, expressed as a fraction of the range of the response variable. Range from 0 to 1. Default: \code{0}.}
 
-\item{seed}{(optional; integer) Random seed to facilitate reproducibility when \code{white_noise} is not 0. Default: 1}
+\item{seed}{(optional; integer vector) Random seed to facilitate reproducibility when \code{white_noise} is not 0. If NULL, the function selects one at random, and the selected seed does not appear in the encoded variable names. Default: 0}
 
-\item{white_noise}{(optional; numeric) Numeric with white noise values in the range 0-1, representing a fraction of the range of the response to be added as noise to the encoded variable. Controls the variability in the encoded variables to mitigate potential overfitting. Default: \code{0}.}
+\item{overwrite}{(optional; logical) If \code{TRUE}, the original predictors in \code{df} are overwritten with their encoded versions, but only one encoding method, smoothing, white noise, and seed are allowed. Otherwise, encoded predictors with their descriptive names are added to \code{df}. Default: FALSE}
 
-\item{replace}{(optional; logical) If \code{TRUE}, the function replaces each categorical variable with its encoded version, and returns the input data frame with the encoded variables instead of the original ones. Default: FALSE}
-
-\item{verbose}{(optional; logical) If TRUE, messages generated during the execution of the function are printed to the console Default: TRUE}
+\item{quiet}{(optional; logical) If FALSE, messages generated during the execution of the function are printed to the console Default: FALSE}
 }
 \value{
-The input data frame with newly encoded columns if \code{replace} is \code{FALSE}, or the input data frame with encoded columns if \code{TRUE}
+data frame
 }
 \description{
-Target encoding involves replacing the values of categorical variables with numeric ones from a "target variable", usually a model's response. Target encoding can be useful for improving the performance of machine learning models.
+Target encoding involves replacing the values of categorical variables with numeric ones derived from a "target variable", usually a model's response.
 
-This function identifies categorical variables in the input data frame, and transforms them using a set of target-encoding methods selected by the user, and returns the input data frame with the newly encoded variables.
-
-The target encoding methods implemented in this function are:
-
+In essence, target encoding works as follows:
 \itemize{
-\item "rank": Returns the rank of the group as a integer, starting with 1 as the rank of the group with the lower mean of the response variable. The variables returned by this method are named with the suffix "__encoded_rank". This method is implemented in the function \code{\link[=target_encoding_rank]{target_encoding_rank()}}.
-\item "mean": Replaces each value of the categorical variable with the mean of the response across the category the given value belongs to. This option accepts the argument "white_noise" to limit potential overfitting. The variables returned by this method are named with the suffix "__encoded_mean". This method is implemented in the function \code{\link[=target_encoding_mean]{target_encoding_mean()}}.
-\item "rnorm": Computes the mean and standard deviation of the response for each group of the categorical variable, and uses \code{\link[=rnorm]{rnorm()}} to generate random values from a normal distribution with these parameters. The argument \code{rnorm_sd_multiplier} is used as a multiplier of the standard deviation to control the range of values produced by \code{\link[=rnorm]{rnorm()}} for each group of the categorical predictor. The variables returned by this method are named with the suffix "__encoded_rnorm".  This method is implemented in the function \code{\link[=target_encoding_rnorm]{target_encoding_rnorm()}}.
-\item "loo": This is the leave-one-out method, that replaces each categorical value with the mean of the response variable across the other cases within the same group. This method supports the \code{white_noise} argument to increase limit potential overfitting. The variables returned by this method are named with the suffix "__encoded_loo". This method is implemented in the function \code{\link[=target_encoding_loo]{target_encoding_loo()}}.
+\item 1. group all cases belonging to a unique value of the categorical variable.
+\item 2. compute a statistic of the target variable across the group cases.
+\item 3. assign the value of the statistic to the group.
 }
 
-The methods "mean" and "rank" support the \code{white_noise} argument, which is a fraction of the range of the \code{response} variable, and the maximum possible value of white noise to be added. For example, if \code{response} is within 0 and 1, a \code{white_noise} of 0.25 will add to every value of the encoded variable a random number selected from a normal distribution between -0.25 and 0.25. This argument helps control potential overfitting induced by the encoded variable.
+The methods to compute the group statistic implemented here are:
 
-The method "rnorm" has the argument \code{rnorm_sd_multiplier}, which multiplies the standard deviation argument of the \verb{\link[stats]\{rnorm\}} function to control the spread of the encoded values between groups. Values smaller than 1 reduce the spread in the results, while values larger than 1 have the opposite effect.
+\itemize{
+\item "mean" (implemented in \code{target_encoding_mean()}): Encodes categorical values with the group means of the response. Variables encoded with this method are identified with the suffix "__encoded_mean". It has a method to control overfitting implemented via the argument \code{smoothing}. The integer value of this argument indicates a threshold in number of rows. Groups above this threshold are encoded with the group mean, while groups below it are encoded with a weighted mean of the group's mean and the global mean. This method is named "mean smoothing" in the relevant literature.
+\item "rank" (implemented in \code{target_encoding_rank()}): Returns the rank of the group as a integer, being 1 he group with the lower mean of the response variable. Variables encoded with this method are identified with the suffix "__encoded_rank".
+\item "loo" (implemented in \code{target_encoding_loo()}): Known as the "leave-one-out method" in the literature, it encodes each categorical value with the mean of the response variable across all other group cases. This method controls overfitting better than "mean". Variables encoded with this method are identified with the suffix "__encoded_loo".
+}
+
+Accepts a parallelization setup via \code{\link[future:plan]{future::plan()}} and a progress bar via \code{\link[progressr:handlers]{progressr::handlers()}} (see examples).
 }
 \examples{
 
@@ -72,15 +71,13 @@ vi <- vi[1:1000, ]
 #applying all methods for a continuous response
 df <- target_encoding_lab(
   df = vi,
-  response = "vi_mean",
+  response = "vi_numeric",
   predictors = "koppen_zone",
-  encoding_methods = c(
+  methods = c(
     "mean",
-    "rank",
-    "rnorm",
-    "loo"
+    "loo",
+    "rank"
   ),
-  rnorm_sd_multiplier = c(0, 0.1, 0.2),
   white_noise = c(0, 0.1, 0.2)
 )
 
@@ -91,20 +88,18 @@ predictors.encoded <- grep(
   value = TRUE
 )
 
-#correlation between encoded predictors and the response
-stats::cor(
-  x = df[["vi_mean"]],
-  y = df[, predictors.encoded],
-  use = "pairwise.complete.obs"
-)
-
 
 }
 \references{
 \itemize{
-\item Micci-Barreca, D. (2001) A Preprocessing Scheme for High-Cardinality Categorical Attributes in Classification and Prediction Problems. SIGKDD Explor. Newsl. 3, 1, 27-32 \doi{10.1145/507533.507538}
+\item Micci-Barreca, D. (2001) A Preprocessing Scheme for High-Cardinality Categorical Attributes in Classification and Prediction Problems. SIGKDD Explor. Newsl. 3, 1, 27-32. doi: 10.1145/507533.507538
 }
+}
+\seealso{
+Other target_encoding: 
+\code{\link{target_encoding_mean}()}
 }
 \author{
-Blas M. Benito
+Blas M. Benito, PhD
 }
+\concept{target_encoding}

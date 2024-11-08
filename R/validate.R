@@ -1,26 +1,21 @@
-#' Validate input data frame
+#' Validate Argument df
 #'
 #' @description
-#'
-#' Internal function to validate and prepare the input data frame for a multicollinearity analysis.
-#'
-#' Validates a data frame to ensure it complies with the requirements of the package functions. The function performs the following actions:
+#' Internal function to validate the argument `df` and ensure it complies with the requirements of the package functions. It performs the following actions:
 #' \itemize{
 #'   \item Stops if 'df' is NULL.
 #'   \item Stops if 'df' cannot be coerced to data frame.
 #'   \item Stops if 'df' has zero rows.
 #'   \item Removes geometry column if the input data frame is an "sf" object.
 #'   \item Removes non-numeric columns with as many unique values as rows df has.
-#'   \item Raise warning if number of rows of 'df' is lower than 'min_rows'.
 #'   \item Converts logical columns to numeric.
 #'   \item Converts factor and ordered columns to character.
 #'   \item Tags the data frame with the attribute `validated = TRUE` to let the package functions skip the data validation.
 #' }
 #'
 #'
-#' @param df (required; data frame or matrix) Input data frame. Default: NULL
-#' @param min_rows (required; integer) Minimum number of rows required for a pairwise correlation or a variance inflation factor analysis. Default: 30
-#' @return The input data frame modified to comply with the requirements of the functions in this package
+#' @inheritParams collinear
+#' @return data frame
 #' @examples
 #'
 #' data(vi)
@@ -32,104 +27,115 @@
 #'
 #' #tagged as validated
 #' attributes(vi)$validated
-#'
 #' @autoglobal
-#' @author Blas M. Benito
+#' @family data_validation
 #' @export
 validate_df <- function(
     df = NULL,
-    min_rows = 30
+    quiet = FALSE
 ){
 
   #handle df = NULL
   if(is.null(df)){
-    stop("argument 'df' cannot be NULL.")
+    stop(
+      "collinear::validate_df(): argument 'df' cannot be NULL.",
+      call. = FALSE
+    )
   }
 
   #if already validated, return it
-  if(!is.null(attr(df, "validated"))){
-    return(df)
+  df.validated <- attributes(df)$validated
+  if(!is.null(df.validated)){
+    if(df.validated == TRUE){
+      return(df)
+    }
   }
 
   #handle coercion to df
   if(is.data.frame(df) == FALSE){
     df <- tryCatch(
-      {as.data.frame(df)},
+      {
+        as.data.frame(df)
+      },
       error = function(e){
-        stop("argument 'df' must be a data frame or a matrix.")
+        stop(
+          "collinear::validate_df(): argument 'df' must be data frame or coercible to data frame.",
+          call. = FALSE
+        )
       }
     )
   }
 
   #stop if no rows
   if(nrow(df) == 0){
-    stop("Argument 'df' has zero rows.")
+    stop(
+      "collinear::validate_df(): argument 'df' has zero rows.",
+      call. = FALSE
+    )
   }
 
   #remove geometry column from df
-  df <- drop_geometry_column(df = df)
+  df <- drop_geometry_column(
+    df = df,
+    quiet = quiet
+  )
 
-  #remove non-numeric columns with as many values as rows
-  non.numeric.columns <- identify_non_numeric_predictors(df)
+  # replace inf with NA ----
+  n_inf <- lapply(
+    X = df,
+    FUN = is.infinite
+  ) |>
+    unlist() |>
+    sum()
 
-  if(length(non.numeric.columns) > 0){
+  if(n_inf > 0){
 
-    non.numeric.columns.unique.values <- lapply(
-      X = non.numeric.columns,
-      FUN = function(x) length(unique(df[[x]]))
-    ) |>
-      unlist()
+    if(quiet == FALSE){
 
-    names(non.numeric.columns.unique.values) <- non.numeric.columns
-
-    columns.to.remove <- names(
-      non.numeric.columns.unique.values[
-        non.numeric.columns.unique.values == nrow(df)
-      ]
-    )
-
-    if(length(columns.to.remove) > 0){
-      warning(
-        "the column/s ",
-        paste0(columns.to.remove, collapse = ", "),
-        " have as many unique values as rows in 'df' and will be ignored."
+      message(
+        "\ncollinear::validate_df(): replacing ", n_inf, " Inf value/s with NA."
       )
+
     }
 
-    df <- df[, !(colnames(df) %in% columns.to.remove), drop = FALSE]
+    is.na(df) <- do.call(
+      what = cbind,
+      args = lapply(
+        X = df,
+        FUN = is.infinite
+      )
+    )
 
   }
 
-  #convert types
-
-  #logical to numeric
-  df <- rapply(
-    object = df,
-    f = as.numeric,
-    classes = c(
-      "logical"
-    ),
-    how = "replace"
-  )
-
-  #factors and ordered to characters
-  df <- rapply(
-    object = df,
-    f = as.character,
-    classes = c(
-      "factor",
-      "ordered"
-    ),
-    how = "replace"
-  )
-
-  #number of rows must be > 30
-  if(nrow(df) < min_rows){
-    warning(
-      "the number of rows in 'df' is lower than ",
-      min_rows,
-      ". A multicollinearity analysis may fail or yield meaningless results."
+  # logical to numeric ----
+  logical_columns <- colnames(df)[
+    sapply(
+      X = df,
+      FUN = is.logical
     )
+  ]
+
+  if(length(logical_columns) > 0){
+
+    if(quiet == FALSE){
+
+      message(
+        "\ncollinear::validate_df(): converting these logical column/s to numeric: \n - ",
+        paste0(logical_columns, collapse = "\n - ")
+      )
+
+    }
+
+    df <- rapply(
+      object = df,
+      f = as.numeric,
+      classes = c(
+        "logical"
+      ),
+      how = "replace"
+    )
+
   }
 
   attr(
@@ -141,31 +147,25 @@ validate_df <- function(
 
 }
 
-#' Validate the 'predictors' argument for analysis
+#' Validate Argument predictors
 #'
 #' @description
-#'
-#' Requires the argument 'df' to be validated with [validate_df()].
+#' Internal function to validate the `predictors` argument. Requires the argument 'df' to be validated with [validate_df()].
 #'
 #' Validates the 'predictors' argument to ensure it complies with the requirements of the package functions. It performs the following actions:
 #' \itemize{
 #'   \item Stops if 'df' is NULL.
 #'   \item Stops if 'df' is not validated.
 #'   \item If 'predictors' is NULL, uses column names of 'df' as 'predictors' in the 'df' data frame.
-#'   \item Raise a warning if there are names in 'predictors' not in the column names of 'df', and returns only the ones in 'df'.
+#'   \item Print a message if there are names in 'predictors' not in the column names of 'df', and returns only the ones in 'df'.
 #'   \item Stop if the number of numeric columns in 'predictors' is smaller than 'min_numerics'.
-#'   \item Raise a warning if there are zero-variance columns in 'predictors' and returns a new 'predictors' argument without them.
+#'   \item Print a message if there are zero-variance columns in 'predictors' and returns a new 'predictors' argument without them.
 #'   \item Tags the vector with the attribute `validated = TRUE` to let the package functions skip the data validation.
 #' }
 #'
+#' @inheritParams collinear
 #'
-#' @param df (required; data frame) A validated data frame with numeric and/or character predictors, and optionally, a response variable. Default: NULL.
-#' @param response (optional, character string) Name of a numeric response variable. Used to remove the response from the predictors when predictors is NULL. Character response variables are ignored. Default: NULL.
-#' @param predictors (optional; character vector) character vector with predictor names in 'df'. If omitted, all columns of 'df' are used as predictors. Default:NULL
-#' @param min_numerics (required, integer) Minimum number of numeric predictors required. Default: 1
-#' @param decimals (required, integer) Number of decimal places for the zero variance test. Smaller numbers will increase the number of variables detected as near-zero variance. Recommended values will depend on the range of the numeric variables in 'df'. Default: 4
-#'
-#' @return A character vector of validated predictor names
+#' @return character vector: predictor names
 #' @examples
 #'
 #' data(
@@ -188,101 +188,144 @@ validate_df <- function(
 #' attributes(vi_predictors)$validated
 #'
 #' @autoglobal
-#' @author Blas M. Benito
+#' @family data_validation
 #' @export
 validate_predictors <- function(
     df = NULL,
     response = NULL,
     predictors = NULL,
-    min_numerics = 0,
-    decimals = 4
+    quiet = FALSE
 ){
 
-  #stop if no df
-  if(is.null(df)){
-    stop("argument 'df' cannot be NULL.")
-  }
 
-  #stop if df is not validated,
-  if(is.null(attr(df, "validated"))){
-    stop("argument 'df' is not validated. Please, run validate_df() before validate_predictors().")
-  }
+  # df ----
+  df <- validate_df(
+    df = df,
+    quiet = quiet
+  )
+
+  # predictors ----
 
   #if predictors is NULL, use colnames(df)
   if(is.null(predictors)){
+
+    if(!is.null(response)){
+      for(response.i in response){
+        df[[response.i]] <- NULL
+      }
+    }
+
     predictors <- colnames(df)
-  }
 
-  #if already validated, return it
-  if(!is.null(attr(predictors, "validated"))){
-    return(predictors)
-  }
+  } else {
 
-  #subset df
-  df <- df[, predictors, drop = FALSE]
+    #remove response from predictors
+    if(
+      !is.null(response) &&
+      any(response %in% predictors)
+      ){
 
-  #identify wrongly named predictors
-  predictors.missing <- setdiff(
-    x = predictors,
-    y = colnames(df)
-  )
-
-  if(length(predictors.missing) > 0){
-
-    warning(
-      "these predictors are not column names of 'df' and will be ignored:\n",
-      paste(
-        predictors.missing,
-        collapse = "\n"
+      predictors <- setdiff(
+        x = predictors,
+        y = response
       )
-    )
 
-    #getting common predictors
-    predictors <- intersect(
+    }
+
+    #identify wrongly named predictors
+    predictors.missing <- setdiff(
       x = predictors,
       y = colnames(df)
     )
 
-  }
+    if(length(predictors.missing) > 0){
 
-  #number of numeric predictors must be >= min_numerics
-  if(length(identify_numeric_predictors(df)) < min_numerics){
-    stop(
-      "number of numeric columns in 'df' must be >= ",
-      min_numerics,
-      "."
-    )
-  }
+      if(quiet == FALSE){
 
-  #removing zero variance predictors
-  predictors.zero.variance <- identify_zero_variance_predictors(
-    df = df,
-    predictors = predictors,
-    decimals = decimals
-  )
+        message(
+          "\ncollinear::validate_predictors(): these 'predictors' are not column names of 'df' and will be ignored:\n - ",
+          paste(
+            predictors.missing,
+            collapse = "\n - "
+          )
+        )
 
-  if(length(predictors.zero.variance) > 0){
+      }
 
-    warning(
-      "these predictors have near zero variance and will be ignored:\n",
-      paste0(
-        predictors.zero.variance,
-        collapse = "\n"
+      #getting predictors in df only
+      predictors <- intersect(
+        x = predictors,
+        y = colnames(df)
       )
-    )
 
-    predictors <- setdiff(
-      predictors,
-      predictors.zero.variance
-    )
+    }
 
   }
 
-  #removing response from predictors
-  predictors <- setdiff(
-    x = predictors,
-    y = response
-  )
+
+  if(nrow(df) >= 10){
+
+    #removing zero variance predictors
+    predictors.zero.variance <- identify_predictors_zero_variance(
+      df = df,
+      predictors = predictors
+    )
+
+    if(length(predictors.zero.variance) > 0){
+
+      if(quiet == FALSE){
+
+        message(
+          "\ncollinear::validate_predictors(): these predictors have near zero variance and will be ignored:\n - ",
+          paste0(
+            predictors.zero.variance,
+            collapse = "\n - "
+          )
+        )
+
+      }
+
+      predictors <- setdiff(
+        predictors,
+        predictors.zero.variance
+      )
+
+    }
+
+    #removing constant categoricals
+    predictors.constant <- predictors[
+      apply(
+        X = df[, predictors, drop = FALSE],
+        MARGIN = 2,
+        FUN = function(x){
+          length(unique(x)) == 1
+        }
+      ) |>
+        unlist()
+    ]
+
+    if(length(predictors.constant) > 0){
+
+      if(quiet == FALSE){
+
+        message(
+          "\ncollinear::validate_predictors(): these predictors have constant values and will be ignored:\n - ",
+          paste0(
+            predictors.constant,
+            collapse = "\n - "
+          )
+        )
+
+      }
+
+      predictors <- setdiff(
+        predictors,
+        predictors.constant
+      )
+
+    }
+
+  }
 
   attr(
     x = predictors,
@@ -294,17 +337,13 @@ validate_predictors <- function(
 }
 
 
-#' Validate the 'response' argument for target encoding of non-numeric variables
+#' Validate Argument response
 #'
 #' @description
+#' Internal function to validate the argument `response`. Requires the argument 'df' to be validated with [validate_df()].
 #'
-#' Requires the argument 'df' to be validated with [validate_df()].
-#'
-#'
-#' @param df (required; data frame) A validated data frame with numeric and/or character predictors predictors, and optionally, a response variable. Default: NULL.
-#' @param response (optional, character string) Name of a numeric response variable. Character response variables are ignored. Default: NULL.
-#' @param decimals (required, integer) number of decimal places for the zero variance test. Default: 4
-#' @return character string with name of the response
+#' @inheritParams validate_predictors
+#' @return character string: response name
 #' @examples
 #'
 #' data(
@@ -319,32 +358,23 @@ validate_predictors <- function(
 #' #validating example predictors
 #' response <- validate_response(
 #'   df = vi,
-#'   response = "vi_mean"
+#'   response = "vi_numeric"
 #' )
 #'
 #' #tagged as validated
 #' attributes(response)$validated
 #'
 #' @autoglobal
-#' @author Blas M. Benito
+#' @family data_validation
 #' @export
 validate_response <- function(
     df = NULL,
     response = NULL,
-    decimals = 4
+    quiet = FALSE
 ){
 
-  if(is.null(df)){
-    stop("argument 'df' cannot be NULL.")
-  }
-
-  #if already validated, return it
-  if(is.null(attr(df, "validated"))){
-    stop("argument 'df' is not validated. Please, run validate_df() before validate_response().")
-  }
-
-  if(is.null(response) == TRUE){
-    return(NULL)
+  if(is.null(response)){
+    return(response)
   }
 
   #if already validated, return it
@@ -352,54 +382,86 @@ validate_response <- function(
     return(response)
   }
 
-  if(is.character(response) == FALSE){
-    stop("argument 'response' must be a character string")
-  }
+  df <- validate_df(
+    df = df,
+    quiet = quiet
+  )
 
-  if(length(response) != 1){
-    if(is.required == TRUE){
-      stop("argument 'response' must be of length 1.")
-    }
+  if(length(response) > 1){
+    response <- response[1]
   }
 
   #check that the response is in df
   if(!(response %in% colnames(df))){
-    stop("argument 'response' must be a column name of 'df'.")
-  }
 
-  if(is.numeric(df[[response]]) == FALSE){
-    warning(
-      "the 'response' column '",
-      response,
-      "' is not numeric, ignoring it."
-    )
+    if(quiet == FALSE){
+
+      message(
+        "\ncollinear::validate_response(): argument 'response' is not a column name of 'df' and will be ignored."
+      )
+
+    }
     return(NULL)
   }
 
-  response.zero.variance <- identify_zero_variance_predictors(
-    df = df,
-    predictors = response,
-    decimals = 4
-  )
+  #check that it has not near-zero variance
+  if(is.numeric(df[[response]]) == TRUE){
 
-  if(length(response.zero.variance) == 1){
-    warning(
-      "the 'response' column '",
-      response,
-      "' has near-zero variance, ignoring it."
+    response.zero.variance <- identify_predictors_zero_variance(
+      df = df,
+      predictors = response
     )
-    return(NULL)
+
+    if(length(response.zero.variance) == 1){
+
+      if(quiet == FALSE){
+
+        message(
+          "\ncollinear::validate_response(): 'response' column '",
+          response,
+          "' has near-zero variance and will be ignored."
+        )
+
+      }
+      return(NULL)
+    }
+
   }
 
+  #check that it is not constant
+  if(length(unique(df[[response]])) == 1){
+
+    if(quiet == FALSE){
+
+      message(
+        "\ncollinear::validate_response(): 'response' column '",
+        response,
+        "' has constant values and will be ignored."
+      )
+
+    }
+
+    return(NULL)
+
+  }
+
+  #chedk NA
   response.na.values <- sum(is.na(df[[response]]))
+
   if(response.na.values > 0){
-    warning(
-      "the 'response' column '",
-      response,
-      "' has ",
-      response.na.values,
-      " NA values. This may cause unexpected issues."
-    )
+
+    if(quiet == FALSE){
+
+      message(
+        "\ncollinear::validate_response(): 'response' column '",
+        response,
+        "' has ",
+        response.na.values,
+        " NA values and may cause unexpected issues."
+      )
+
+    }
+
   }
 
   attr(
@@ -412,9 +474,601 @@ validate_response <- function(
 }
 
 
+#' Validate Argument preference_order
+#'
+#' @description
+#' Internal function to validate the argument `preference_order`.
+#'
+#'
+#' @inheritParams collinear
+#' @param preference_order_auto (required, character vector) names of the predictors in the automated preference order returned by [vif_select()] or [cor_select()]
+#' @param function_name (optional, character string) Name of the function performing the check. Default: "collinear::validate_preference_order()"
+#'
+#' @return character vector: ranked variable names
+#' @export
+#' @family data_validation
+#' @autoglobal
+#' @examples
+#' data(
+#'   vi,
+#'   vi_predictors
+#'   )
+#'
+#' #validating example data frame
+#' vi <- validate_df(
+#'   df = vi
+#' )
+#'
+#' #validating example predictors
+#' vi_predictors <- validate_predictors(
+#'   df = vi,
+#'   predictors = vi_predictors
+#' )
+#'
+#' #tagged as validated
+#' attributes(vi_predictors)$validated
+#'
+#' #validate preference order
+#' my_order <- c(
+#'   "swi_max",
+#'   "swi_min",
+#'   "swi_deviance" #wrong one
+#' )
+#'
+#' my_order <- validate_preference_order(
+#'   predictors = vi_predictors,
+#'   preference_order = my_order,
+#'   preference_order_auto = vi_predictors
+#' )
+#'
+#' #has my_order first
+#' #excludes wrong names
+#' #all other variables ordered according to preference_order_auto
+#' my_order
+validate_preference_order <- function(
+    predictors = NULL,
+    preference_order = NULL,
+    preference_order_auto = NULL,
+    function_name = "collinear::validate_preference_order()",
+    quiet = FALSE
+){
+
+  if(is.null(preference_order_auto)){
+    stop(
+      function_name,
+      ": argument 'preference_order_auto' cannot be NULL.",
+      call. = FALSE
+    )
+  }
+
+  if(is.null(preference_order)){
+
+    if(quiet == FALSE){
+
+      message(
+        "\n",
+        function_name,
+        ": argument 'preference_order' is NULL, ranking predictors from lower to higher multicollinearity."
+      )
+
+    }
+
+    return(preference_order_auto)
+
+  }
+
+  #check if preference_order comes from preference_order()
+  if(is.data.frame(preference_order) == TRUE){
+
+    if("predictor" %in% names(preference_order)){
+
+      preference_order <- preference_order$predictor
+
+    } else {
+      stop(
+        function_name,
+        ": argument 'preference_order' must be a data frame with the column 'predictor'.",
+        call. = FALSE
+      )
+    }
+  }
+
+  #subset preference_order in predictors
+  if(!is.null(predictors)){
+    preference_order <- preference_order[preference_order %in% predictors]
+  }
+
+  #if there are variables not in preference_order
+  #add them in the order of preference_order.auto
+  if(length(preference_order) < length(predictors)){
+
+    not_in_preference_order <- setdiff(
+      x = predictors,
+      y = preference_order
+    )
+
+    preference_order <- c(
+      preference_order,
+      preference_order_auto[
+        preference_order_auto %in% not_in_preference_order
+      ]
+    )
+
+  }
+
+  preference_order
+
+}
 
 
+#' Validate Data for VIF Analysis
+#'
+#' @description
+#' Internal function to assess whether the input arguments `df` and `predictors` result in data dimensions suitable for a VIF analysis.
+#'
+#' If the number of rows in `df` is smaller than 10 times the length of `predictors`, the function either issues a message and restricts `predictors` to a manageable number, or returns an error.
+#'
+#'
+#' @inheritParams collinear
+#' @param function_name (optional, character string) Name of the function performing the check. Default: "collinear::validate_data_vif()"
+#'
+#' @return character vector: predictors names
+#' @export
+#' @family data_validation
+#' @autoglobal
+validate_data_vif <- function(
+    df = NULL,
+    predictors = NULL,
+    function_name = "collinear::validate_data_vif()",
+    quiet = FALSE
+){
+
+  df <- validate_df(
+    df = df,
+    quiet = quiet
+  )
+
+  predictors <- validate_predictors(
+    df = df,
+    predictors = predictors,
+    quiet = quiet
+  )
+
+  predictors_arg <- predictors
+
+  predictors <- identify_predictors_numeric(
+    df = df,
+    predictors = predictors
+  )
 
 
+  #minimum number of required rows
+  min.rows <- length(predictors) * 10
+
+  #manageable number of predictors with rows in df
+  min.predictors <- floor(nrow(df)/10)
+
+  #if fewer rows than required
+  if(nrow(df) <= min.rows){
+
+    if(min.predictors > 1){
+
+      #restrict predictors to a manageable number
+      predictors <- predictors[1:min.predictors]
+
+      warning(
+        function_name,
+        ": VIF computation requires >=10 rows in 'df' per predictor. VIF analysis will be performed for these predictors: '",
+        paste(predictors, collapse = "', '"),
+        "'.",
+        call. = FALSE
+      )
+
+      return(predictors)
+
+    } else {
+
+      stop(
+        function_name,
+        ": at least 10 rows per predictor are required for VIF-based multicollinearity filtering.",
+        call. = FALSE
+      )
+
+    }
+
+  }
+
+  if(length(predictors) == 0){
+
+    if(quiet == FALSE){
+
+      message(
+        "\n",
+        function_name,
+        ": no numeric predictors available, skipping VIF-based filtering."
+      )
+
+    }
+
+    return(character())
+  }
+
+  if(length(predictors) == 1){
+
+    if(quiet == FALSE){
+
+      message(
+        "\n",
+        function_name,
+        ": only one predictor available, skipping VIF-based filtering."
+      )
+
+    }
+
+    return(predictors)
+  }
+
+  if(length(predictors) < length(predictors_arg)){
+
+    predictors_lost <- setdiff(
+      x = predictors_arg,
+      y = predictors
+    )
+
+    if(quiet == FALSE){
+
+      message(
+        "\n",
+        function_name,
+        ": these predictors are not numeric and will be ignored: \n - ",
+        paste(predictors_lost, collapse = "\n - "),
+        "."
+      )
+
+    }
+
+  }
+
+  predictors
+
+}
 
 
+#' Validate Data for Correlation Analysis
+#'
+#' @description
+#' Internal function to assess whether the input arguments `df` and `predictors` result in data dimensions suitable for pairwise correlation analysis.
+#'
+#' If the number of rows in `df` is smaller than 10, an error is issued.
+#'
+#' @inheritParams collinear
+#' @param function_name (optional, character string) Name of the function performing the check. Default: "collinear::validate_data_cor()"
+#'
+#' @return character vector: predictors names
+#' @export
+#' @family data_validation
+#' @autoglobal
+validate_data_cor <- function(
+    df = NULL,
+    predictors = NULL,
+    function_name = "collinear::validate_data_cor()",
+    quiet = FALSE
+){
+
+  df <- validate_df(
+    df = df,
+    quiet = quiet
+  )
+
+  if(nrow(df) < 10) {
+
+    stop(
+      function_name,
+      ": at least 10 rows per predictor are required, skipping pairwise correlation filtering.",
+      call. = FALSE
+    )
+
+  }
+
+  predictors <- validate_predictors(
+    df = df,
+    predictors = predictors,
+    quiet = quiet
+  )
+
+  if(length(predictors) == 0){
+
+    if(quiet == FALSE){
+
+      message(
+        "\n",
+        function_name,
+        ": no predictors available, skipping pairwise correlation filtering."
+      )
+
+    }
+    return(predictors)
+  }
+
+  if(length(predictors) == 1){
+
+    if(quiet == FALSE){
+
+      message(
+        "\n",
+        function_name,
+        ": only one predictor available, skipping pairwise correlation filtering."
+      )
+
+    }
+    return(predictors)
+  }
+
+  predictors
+
+}
+
+
+#' Validates Arguments of `target_encoding_lab()`
+#'
+#' @description
+#' Internal function to validate configuration arguments for [target_encoding_lab()].
+#'
+#'
+#' @inheritParams target_encoding_lab
+#' @return list
+#' @export
+#' @autoglobal
+#' @family data_validation
+#' @examples
+#' validate_encoding_arguments(
+#'   df = vi,
+#'   response = "vi_numeric",
+#'   predictors = vi_predictors
+#'   )
+validate_encoding_arguments <- function(
+    df = NULL,
+    response = NULL,
+    predictors = NULL,
+    methods = c(
+      "mean",
+      "loo",
+      "rank"
+    ),
+    smoothing = 0,
+    white_noise = 0,
+    seed = 0,
+    overwrite = FALSE,
+    quiet = FALSE
+){
+
+  # early stops ----
+
+  ## methods is NULL ----
+  if(is.null(methods)){
+
+    if(quiet == FALSE){
+
+      message(
+        "\ncollinear::target_encoding_lab(): argument 'encoding_method' is NULL, skipping target encoding."
+      )
+
+    }
+
+    return(
+      list(
+        df = df
+      )
+    )
+
+  }
+
+  ## df ----
+  df <- validate_df(
+    df = df,
+    quiet = quiet
+  )
+
+  ## response ----
+  response <- validate_response(
+    df = df,
+    response = response,
+    quiet = quiet
+  )
+
+  if(is.null(response)){
+
+    if(quiet == FALSE){
+
+      message("\ncollinear::target_encoding_lab(): argument 'response' is NULL, skipping target-encoding.")
+
+    }
+
+    return(
+      list(
+        response = NULL
+      )
+    )
+
+  }
+
+  if(!is.numeric(df[[response]])){
+
+    if(quiet == FALSE){
+
+      message("\ncollinear::target_encoding_lab(): argument 'response' is not numeric, skipping target-encoding.")
+
+    }
+
+    return(df)
+
+  }
+
+  ## predictors ----
+  predictors <- validate_predictors(
+    df = df,
+    response = response,
+    predictors = predictors,
+    quiet = quiet
+  )
+
+  #identify categorical predictors
+  predictors <- identify_predictors_categorical(
+    df = df,
+    predictors = predictors
+  )
+
+  if(length(predictors) == 0){
+
+    if(quiet == FALSE){
+      message("\ncollinear::target_encoding_lab(): argument 'predictors' is empty, skipping target encoding.")
+    }
+
+    return(
+      list(
+        predictors = predictors
+      )
+    )
+
+  }
+
+
+  ## white noise ----
+  if(is.null(white_noise)){
+    white_noise <- 0
+  }
+
+  white_noise <- as.numeric(white_noise)
+
+  white_noise <- white_noise[white_noise >= 0 & white_noise <= 1]
+
+  if(length(white_noise) == 0){
+    white_noise <- 0
+  }
+
+  ## smoothing ----
+  smoothing <- as.integer(smoothing)
+
+  smoothing <- smoothing[smoothing >= 0 & smoothing <= nrow(df)]
+
+  if(length(smoothing) == 0){
+    smoothing <- 0
+  }
+
+  ## seed ----
+  if(!is.null(seed)){
+    seed <- as.integer(seed)
+  } else {
+    seed <- sample.int(
+      n = .Machine$integer.max,
+      size = 1
+    )
+  }
+
+  # methods ----
+  valid_methods <- c(
+    "mean",
+    "loo",
+    "rank"
+  )
+
+  methods <- intersect(
+    x = methods,
+    y = valid_methods
+  )
+
+  if(length(methods) == 0){
+
+    if(quiet == FALSE){
+
+      message(
+        "\ncollinear::target_encoding_lab(): argument 'methods' not valid, resetting it to: '",
+        paste(valid_methods, collapse = "', '"),
+        "'."
+      )
+
+    }
+
+    methods <- valid_methods
+
+  }
+
+  # overwrite ----
+  if(is.logical(overwrite) == FALSE){
+
+    if(quiet == FALSE){
+      message("\ncollinear::target_encoding_lab(): argument 'overwrite' must be logical, resetting it to FALSE.")
+    }
+
+    overwrite <- FALSE
+
+  }
+
+  if(overwrite == TRUE){
+
+    if(length(methods) > 1){
+
+      if(quiet == FALSE){
+
+        message(
+          "\ncollinear::target_encoding_lab(): only one encoding method allowed when 'overwrite = TRUE', using method: '",
+          methods[1], "'."
+        )
+
+      }
+
+      methods <- methods[1]
+
+    }
+
+    if(length(white_noise) > 1){
+
+      if(quiet == FALSE){
+
+        message("\ncollinear::target_encoding_lab(): only one 'white_noise' value allowed when 'overwrite = TRUE', using value: ", white_noise[1], ".")
+
+      }
+
+      white_noise <- white_noise[1]
+
+    }
+
+    if(length(smoothing) > 1){
+
+      if(quiet == FALSE){
+
+        message("\ncollinear::target_encoding_lab(): only one 'smoothing' value allowed when 'overwrite = TRUE', using value: ", smoothing[1], ".")
+
+      }
+
+      smoothing <- smoothing[1]
+
+    }
+
+    if(length(seed) > 1){
+
+      if(quiet == FALSE){
+
+        message("\ncollinear::target_encoding_lab(): only one 'seed' value allowed when 'overwrite = TRUE', using value: ", seed[1], ".")
+
+      }
+
+      seed <- seed[1]
+
+    }
+
+  }
+
+  list(
+    df = df,
+    response = response,
+    predictors = predictors,
+    methods = methods,
+    smoothing = smoothing,
+    white_noise = white_noise,
+    seed = seed,
+    overwrite = overwrite
+  )
+
+
+}

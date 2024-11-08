@@ -1,142 +1,210 @@
-testthat::test_that("`f_rf_auc_unbalanced()` works", {
-  data(vi)
-  result <- f_rf_auc_unbalanced(x = "growing_season_length", y = "vi_binary", df = vi)
-  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
-  testthat::expect_true(result < 1, info = "Result should be a numeric value.")
-  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
-})
-
-testthat::test_that("`f_rf_auc_balanced()` works", {
-  data(vi)
-  result <- f_rf_auc_balanced(x = "growing_season_length", y = "vi_binary", df = vi)
-  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
-  testthat::expect_true(result < 1, info = "Result should be a numeric value.")
-  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
-})
-
-testthat::test_that("`f_gam_auc_unbalanced()` works", {
-  data(vi)
-  result <- f_gam_auc_unbalanced(x = "growing_season_length", y = "vi_binary", df = vi)
-  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
-  testthat::expect_true(result < 1, info = "Result should be a numeric value.")
-  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
-})
-
-testthat::test_that("`f_gam_auc_balanced()` works", {
-  data(vi)
-  result <- f_gam_auc_balanced(x = "growing_season_length", y = "vi_binary", df = vi)
-  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
-  testthat::expect_true(result < 1, info = "Result should be a numeric value.")
-  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
-})
-
-testthat::test_that("`f_logistic_auc_unbalanced()` works", {
-  data(vi)
-  result <- f_logistic_auc_unbalanced(x = "growing_season_length", y = "vi_binary", df = vi)
-  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
-  testthat::expect_true(result < 1, info = "Result should be a numeric value.")
-  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
-})
-
-testthat::test_that("`f_logistic_auc_balanced()` works", {
-  data(vi)
-  result <- f_logistic_auc_balanced(x = "growing_season_length", y = "vi_binary", df = vi)
-  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
-  testthat::expect_true(result < 1, info = "Result should be a numeric value.")
-  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
-})
-
-testthat::test_that("`f_gam_deviance()` works", {
-  data(vi)
-  result <- f_gam_deviance(x = "growing_season_length", y = "vi_mean", df = vi)
-  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
-  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
-})
-
-testthat::test_that("`f_rf_deviance()` works", {
-  data(vi)
-  result <- f_rf_deviance(x = "growing_season_length", y = "vi_mean", df = vi)
-  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
-  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
-})
-
-testthat::test_that("`f_rf_rsquared()` works", {
-  data(vi)
-  result <- f_rf_rsquared(x = "growing_season_length", y = "vi_mean", df = vi)
-  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
-  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
-})
-
-testthat::test_that("`f_rsquared()` works", {
-  data(vi)
-  result <- f_rsquared(x = "growing_season_length", y = "vi_mean", df = vi)
-  testthat::expect_true(is.numeric(result), info = "Result should be a numeric value.")
-  testthat::expect_true(!is.na(result), info = "Result should not be NA.")
-})
-
 testthat::test_that("`preference_order()` works", {
 
-  data(vi, vi_predictors)
+  expected_colnames <- c(
+    "response",
+    "predictor",
+    "f",
+    "preference"
+  )
+
+  data(
+    vi,
+    vi_predictors,
+    vi_predictors_categorical
+  )
+
+  #subsets to limit example run time
   vi <- vi[1:1000, ]
-  preference.order <- preference_order(
-    df = vi, response = "vi_mean",
-    predictors = vi_predictors, f = f_rsquared, workers = 1
+  vi_predictors <- vi_predictors[1:10]
+  vi_predictors_numeric <- vi_predictors_numeric[1:10]
+  vi_predictors_categorical <- vi_predictors_categorical[1:10]
+
+  #several responses
+  responses <- c(
+    "vi_numeric",
+    "vi_counts",
+    "vi_binomial",
+    "vi_categorical",
+    "vi_factor"
+  )
+
+  df_preference <- preference_order(
+    df = vi,
+    response = responses,
+    predictors = vi_predictors,
+    quiet = TRUE,
+    warn_limit = NULL
   )
 
   testthat::expect_true(
-    is.data.frame(preference.order),
-    info = "Result should be a data frame."
-    )
-
-  testthat::expect_true(
-    all(c("predictor", "preference") %in% colnames(preference.order)),
-    info = "Result should have columns 'predictor' and 'preference'."
-    )
-
-  selected.predictors <- cor_select(
-    df = vi, response = "vi_mean",
-    predictors = vi_predictors, preference_order = preference.order,
-    max_cor = 0.75
+    is.list(df_preference)
   )
 
   testthat::expect_true(
-    is.character(selected.predictors),
-    info = "Result should be a character vector."
-    )
-
-  testthat::expect_true(
-    length(selected.predictors) > 0,
-    info = "There should be selected predictors."
-    )
-
-  selected.predictors.cor <- cor_df(
-    df = vi, response = "vi_mean",
-    predictors = selected.predictors
+    all(names(df_preference) %in% responses)
   )
 
   testthat::expect_true(
-    is.data.frame(selected.predictors.cor),
-    info = "Result should be a data frame."
+    all(colnames(df_preference[[1]]) %in% expected_colnames)
+  )
+
+  #numeric response
+  testthat::expect_message(
+    df_preference <- preference_order(
+      df = vi,
+      response = "vi_numeric",
+      predictors = vi_predictors,
+      f = NULL,
+      warn_limit = NULL
     )
+  ) |>
+    suppressMessages()
 
-  f_rmse <- function(x, y, df) {
-    xy <- scale(na.omit(df[, c(x, y)]))
-    1 - sqrt(mean((xy[, 1] - xy[, 2])^2))
-  }
-
-  preference.order <- preference_order(
-    df = vi, response = "vi_mean",
-    predictors = vi_predictors, f = f_rmse, workers = 1
+  testthat::expect_true(
+    is.data.frame(df_preference)
   )
 
   testthat::expect_true(
-    is.data.frame(preference.order),
-    info = "Result should be a data frame."
-    )
+    ncol(df_preference) == length(expected_colnames)
+  )
 
   testthat::expect_true(
-    all(c("predictor", "preference") %in% colnames(preference.order)),
-    info = "Result should have columns 'predictor' and 'preference'."
-    )
+    nrow(df_preference) == length(vi_predictors)
+  )
+
+  testthat::expect_true(
+    all(colnames(df_preference) %in% expected_colnames)
+  )
+
+
+  #count response
+  df_preference <- preference_order(
+    df = vi,
+    response = "vi_counts",
+    predictors = vi_predictors_numeric,
+    f = f_r2_glm_poisson,
+    warn_limit = NULL,
+    quiet = TRUE
+  )
+
+  testthat::expect_true(
+    is.data.frame(df_preference)
+  )
+
+  testthat::expect_true(
+    ncol(df_preference) == length(expected_colnames)
+  )
+
+
+  testthat::expect_true(
+    nrow(df_preference) >= 1
+  )
+
+  testthat::expect_true(
+    nrow(df_preference) == length(vi_predictors_numeric)
+  )
+
+  testthat::expect_true(
+    all(colnames(df_preference) %in% expected_colnames)
+  )
+
+
+
+
+  #binomial response
+  df_preference <- preference_order(
+    df = vi,
+    response = "vi_binomial",
+    predictors = vi_predictors_numeric,
+    f = f_auc_glm_binomial,
+    warn_limit = NULL,
+    quiet = TRUE
+  )
+
+  testthat::expect_true(
+    is.data.frame(df_preference)
+  )
+
+  testthat::expect_true(
+    ncol(df_preference) == length(expected_colnames)
+  )
+
+
+  testthat::expect_true(
+    nrow(df_preference) >= 1
+  )
+
+  testthat::expect_true(
+    nrow(df_preference) == length(vi_predictors_numeric)
+  )
+
+  testthat::expect_true(
+    all(colnames(df_preference) %in% expected_colnames)
+  )
+
+
+
+  #categorical response and predictors
+  df_preference <- preference_order(
+    df = vi,
+    response = "vi_categorical",
+    predictors = vi_predictors_categorical,
+    f = f_v,
+    warn_limit = NULL,
+    quiet = TRUE
+  )
+
+  testthat::expect_true(
+    is.data.frame(df_preference)
+  )
+
+  testthat::expect_true(
+    ncol(df_preference) == length(expected_colnames)
+  )
+
+
+  testthat::expect_true(
+    nrow(df_preference) >= 1
+  )
+
+  testthat::expect_true(
+    nrow(df_preference) == length(vi_predictors_categorical)
+  )
+
+  testthat::expect_true(
+    all(colnames(df_preference) %in% expected_colnames)
+  )
+
+  #categorical response and categorical and numeric predictors
+  df_preference <- preference_order(
+    df = vi,
+    response = "vi_categorical",
+    predictors = vi_predictors_numeric,
+    f = f_v_rf_categorical,
+    warn_limit = NULL,
+    quiet = TRUE
+  )
+
+  testthat::expect_true(
+    is.data.frame(df_preference)
+  )
+
+  testthat::expect_true(
+    ncol(df_preference) == length(expected_colnames)
+  )
+
+
+  testthat::expect_true(
+    nrow(df_preference) >= 1
+  )
+
+  testthat::expect_true(
+    nrow(df_preference) == length(vi_predictors_numeric)
+  )
+
+  testthat::expect_true(
+    all(colnames(df_preference) %in% expected_colnames)
+  )
+
 
 })

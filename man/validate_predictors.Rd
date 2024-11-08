@@ -2,41 +2,38 @@
 % Please edit documentation in R/validate.R
 \name{validate_predictors}
 \alias{validate_predictors}
-\title{Validate the 'predictors' argument for analysis}
+\title{Validate Argument predictors}
 \usage{
 validate_predictors(
   df = NULL,
   response = NULL,
   predictors = NULL,
-  min_numerics = 0,
-  decimals = 4
+  quiet = FALSE
 )
 }
 \arguments{
-\item{df}{(required; data frame) A validated data frame with numeric and/or character predictors, and optionally, a response variable. Default: NULL.}
+\item{df}{(required; data frame, tibble, or sf) A data frame with responses and predictors. Default: NULL.}
 
-\item{response}{(optional, character string) Name of a numeric response variable. Used to remove the response from the predictors when predictors is NULL. Character response variables are ignored. Default: NULL.}
+\item{response}{(optional; character string or vector) Name/s of response variable/s in \code{df}. Used in target encoding when it names a numeric variable and there are categorical predictors, and to compute preference order. Default: NULL.}
 
-\item{predictors}{(optional; character vector) character vector with predictor names in 'df'. If omitted, all columns of 'df' are used as predictors. Default:NULL}
+\item{predictors}{(optional; character vector) Names of the predictors to select from \code{df}. If omitted, all numeric columns in \code{df} are used instead. If argument \code{response} is not provided, non-numeric variables are ignored. Default: NULL}
 
-\item{min_numerics}{(required, integer) Minimum number of numeric predictors required. Default: 1}
-
-\item{decimals}{(required, integer) Number of decimal places for the zero variance test. Smaller numbers will increase the number of variables detected as near-zero variance. Recommended values will depend on the range of the numeric variables in 'df'. Default: 4}
+\item{quiet}{(optional; logical) If FALSE, messages generated during the execution of the function are printed to the console Default: FALSE}
 }
 \value{
-A character vector of validated predictor names
+character vector: predictor names
 }
 \description{
-Requires the argument 'df' to be validated with \code{\link[=validate_df]{validate_df()}}.
+Internal function to validate the \code{predictors} argument. Requires the argument 'df' to be validated with \code{\link[=validate_df]{validate_df()}}.
 
 Validates the 'predictors' argument to ensure it complies with the requirements of the package functions. It performs the following actions:
 \itemize{
 \item Stops if 'df' is NULL.
 \item Stops if 'df' is not validated.
 \item If 'predictors' is NULL, uses column names of 'df' as 'predictors' in the 'df' data frame.
-\item Raise a warning if there are names in 'predictors' not in the column names of 'df', and returns only the ones in 'df'.
+\item Print a message if there are names in 'predictors' not in the column names of 'df', and returns only the ones in 'df'.
 \item Stop if the number of numeric columns in 'predictors' is smaller than 'min_numerics'.
-\item Raise a warning if there are zero-variance columns in 'predictors' and returns a new 'predictors' argument without them.
+\item Print a message if there are zero-variance columns in 'predictors' and returns a new 'predictors' argument without them.
 \item Tags the vector with the attribute \code{validated = TRUE} to let the package functions skip the data validation.
 }
 }
@@ -62,6 +59,13 @@ vi_predictors <- validate_predictors(
 attributes(vi_predictors)$validated
 
 }
-\author{
-Blas M. Benito
+\seealso{
+Other data_validation: 
+\code{\link{validate_data_cor}()},
+\code{\link{validate_data_vif}()},
+\code{\link{validate_df}()},
+\code{\link{validate_encoding_arguments}()},
+\code{\link{validate_preference_order}()},
+\code{\link{validate_response}()}
 }
+\concept{data_validation}

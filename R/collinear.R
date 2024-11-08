@@ -2,209 +2,368 @@
 #'
 #' @description
 #'
-#' Automates multicollinearity management in data frames with numeric and categorical predictors by combining four methods:
+#' Automates multicollinearity management in data frames with numeric and non-numeric predictors by combining four methods:
 #' \itemize{
-#' \item Pairwise correlation filtering: Pearson, Spearman, and Cramer's V statistics to identify pairs of highly correlated predictors.
-#' \item Variance Inflation Factor (VIF) filtering: identifies predictors that are linear combinations of other predictors.
-#' \item Target encoding: to transform categorical predictors to numeric using a numeric variable as reference.
-#' \item Flexible prioritization method: to help the user select a meaningful set of non-correlated predictors.
+#' \item **Target Encoding**: When a numeric `response` is provided and `encoding_method` is not NULL, it transforms categorical predictors (classes "character" and "factor") to numeric using the response values as reference. See [target_encoding_lab()] for further details.
+#' \item **Preference Order**: When a response of any type is provided via `response`, the association between the response and each predictor is computed with an appropriate function (see [preference_order()] and [f_auto()]), and all predictors are ranked from higher to lower association. This rank is used to preserve important predictors during the multicollinearity filtering.
+#' \item **Pairwise Correlation Filtering**: Automated multicollinearity filtering via pairwise correlation. Correlations between numeric and categoricals  predictors are computed by target-encoding the categorical against the predictor, and correlations between categoricals are computed via Cramer's V. See [cor_select()], [cor_df()], and [cor_cramer_v()] for further details.
+#' \item **VIF filtering**: Automated algorithm to identify and remove numeric predictors that are linear combinations of other predictors. See [vif_select()] and [vif_df()].
 #' }
 #'
-#' The pairwise correlation filtering is implemented in [cor_select()]. This function applies a recursive forward selection algorithm to keep predictors with a Pearson correlation with all other selected predictors lower than the value of the argument `max_cor`.  When two predictors are correlated above this threshold, the one with the lowest preference order is removed. At this stage, if `preference_order` is NULL, predictors are ranked from lower to higher sum of absolute pairwise correlation with the other predictors.
+#' Accepts a parallelization setup via [future::plan()] and a progress bar via [progressr::handlers()] (see examples).
 #'
-#' The VIF-based filtering is implemented in [vif_select()], which removes variables and recomputes VIF scores iteratively, until all variables in the resulting selection have a VIF below the value of the argument `max_vif`. The VIF for a given variable `y` is computed as `1/(1-R2)`, where `R2` is the R-squared of a multiple regression model fitted using `y` as response against the other predictors. The equation can be interpreted as "the rate of perfect model's R-squared to the unexplained variance of this model". The possible range of VIF values is (1, Inf], but the recommended thresholds for maximum VIF (argument `max_vif`) may vary, being 2.5, 5, and 10 the values most commonly mentioned in the relevant bibliography. At this stage, if `preference_order` is NULL, predictors are ranked from lower to higher Variance Inflation Factor.
+#' Accepts a character vector of response variables as input for the argument `response`. When more than one response is provided, the output is a named list of character.
 #'
-#' When a 'response' argument is provided, categorical predictors are converted to numeric via target encoding with the function [target_encoding_lab()], and all predictors are then handled as numeric during the multicollinearity filtering. When the 'response' argument is not provided, categorical variables are ignored. However, in such case, the function [cor_select()] can handle categorical variables, albeit with a lower computation speed.
+#' @section Target Encoding:
 #'
-#' The argument `preference_order` allows prioritizing variables that might be interesting or even required for a given analysis. If `preference_order` is not provided, then the predictors are ranked from lower to higher sum of their absolute correlations with the other predictors in [cor_select()], and by their VIF in [vif_select()], and removed one by one until the maximum R-squared of the correlation matrix is lower than `max_cor` and the maximum VIF is below `max_vif`.
+#' When the argument `response` names a **numeric response variable**, categorical predictors in `predictors` (or in the columns of `df` if `predictors` is NULL) are converted to numeric via **target encoding** with the function [target_encoding_lab()]. When `response` is NULL or names a categorical variable, target-encoding is skipped. This feature facilitates multicollinearity filtering in data frames with mixed column types.
 #'
-#' Please note that near-zero variance columns are identified by [identify_zero_variance_predictors()], and ignored by [collinear()], [cor_select()], and [vif_select()].
+#' @section Preference Order:
 #'
-#' @param df (required; data frame) A data frame with numeric and/or character predictors predictors, and optionally, a response variable. Default: NULL.
-#' @param response (recommended, character string) Name of a numeric response variable. Character response variables are ignored. Please, see 'Details' to better understand how providing this argument or not leads to different results when there are character variables in 'predictors'. Default: NULL.
-#' @param predictors (optional; character vector) character vector with predictor names in 'df'. If omitted, all columns of 'df' are used as predictors. Default: NULL
-#' @param preference_order  (optional; character vector) vector with column names in 'predictors' in the desired preference order, or result of the function [preference_order()]. Allows defining a priority order for selecting predictors, which can be particularly useful when some predictors are more critical for the analysis than others. Predictors not included in this argument are ranked by their Variance Inflation Factor. Default: NULL.
-#' @param cor_method (optional; character string) Method used to compute pairwise correlations. Accepted methods are "pearson" (with a recommended minimum of 30 rows in 'df') or "spearman" (with a recommended minimum of 10 rows in 'df'). Default: "pearson".
-#' @param max_cor (optional; numeric) Maximum correlation allowed between any pair of predictors. Higher values return larger number of predictors with higher multicollinearity. Default: `0.75`
-#' @param max_vif (optional, numeric) Numeric with recommended values between 2.5 and 10 defining the maximum VIF allowed for any given predictor in the output dataset. Higher VIF thresholds should result in a higher number of selected variables. Default: 5.
-#' @param encoding_method (optional; character string). Name of the target encoding method to convert character and factor predictors to numeric. One of "mean", "rank", "loo", "rnorm" (see [target_encoding_lab()] for further details). Default: "mean"
-#' @return Character vector with the names of uncorrelated predictors.
+#' This feature is designed to help protect important predictors during the multicollinearity filtering. It involves the arguments `preference_order` and `f`.
+#'
+#' The argument `preference_order` accepts:
+#' \itemize{
+#'   \item: A character vector of predictor names in a custom order of preference, from first to last. This vector does not need to contain all predictor names, but only the ones relevant to the user.
+#'   \item A data frame returned by [preference_order()], which ranks predictors based on their association with a response variable.
+#'   \item If NULL, and `response` is provided, then [preference_order()] is used internally to rank the predictors using the function `f`. If `f` is NULL as well, then [f_auto()] selects a proper function based on the data properties.
+#' }
+#'
+#' @section Variance Inflation Factors:
+#'
+#' The Variance Inflation Factor for a given variable \eqn{a} is computed as \eqn{1/(1-R2)}, where \eqn{R2} is the multiple R-squared of a multiple regression model fitted using \eqn{a} as response and all other predictors in the input data frame as predictors, as in  \eqn{a = b + c + ...}.
+#'
+#' The square root of the VIF of \eqn{a} is the factor by which the confidence interval of the estimate for \eqn{a} in the linear model \eqn{y = a + b + c + ...}` is widened by multicollinearity in the model predictors.
+#'
+#' The range of VIF values is (1, Inf]. The recommended thresholds for maximum VIF may vary depending on the source consulted, being the most common values, 2.5, 5, and 10.
+#'
+#' @section VIF-based Filtering:
+#'
+#' The function [vif_select()] computes Variance Inflation Factors and removes variables iteratively, until all variables in the resulting selection have a VIF below `max_vif`.
+#'
+#' If the argument `preference_order` is not provided, all variables are ranked from lower to higher VIF, as returned by [vif_df()], and the variable with the higher VIF above `max_vif` is removed on each iteration.
+#'
+#' If `preference_order` is defined, whenever two or more variables are above `max_vif`, the one higher in `preference_order` is preserved, and the next one with a higher VIF is removed. For example, for the predictors and preference order \eqn{a} and \eqn{b}, if any of their VIFs is higher than `max_vif`, then \eqn{b} will be removed no matter whether its VIF is lower or higher than \eqn{a}'s VIF. If their VIF scores are lower than `max_vif`, then both are preserved.
+#'
+#' @section Pairwise Correlation Filtering:
+#'
+#' The function [cor_select()] applies a recursive forward selection algorithm to keep predictors with a maximum Pearson correlation with all other selected predictors lower than `max_cor`.
+#'
+#' If the argument `preference_order` is NULL, the predictors are ranked from lower to higher sum of absolute pairwise correlation with all other predictors.
+#'
+#' If `preference_order` is defined, whenever two or more variables are above `max_cor`, the one higher in `preference_order` is preserved. For example, for the predictors and preference order \eqn{a} and \eqn{b}, if their correlation is higher than `max_cor`, then \eqn{b} will be removed and \eqn{a} preserved. If their correlation is lower than `max_cor`, then both are preserved.
+#'
+#'
+#' @param df (required; data frame, tibble, or sf) A data frame with responses and predictors. Default: NULL.
+#' @param response (optional; character string or vector) Name/s of response variable/s in `df`. Used in target encoding when it names a numeric variable and there are categorical predictors, and to compute preference order. Default: NULL.
+#' @param predictors (optional; character vector) Names of the predictors to select from `df`. If omitted, all numeric columns in `df` are used instead. If argument `response` is not provided, non-numeric variables are ignored. Default: NULL
+#' @param encoding_method (optional; character string). Name of the target encoding method. One of: "loo", "mean", or "rank". If NULL, target encoding is disabled. Default: "loo"
+#' @param preference_order (optional; string, character vector, output of [preference_order()]). Defines a priority order, from first to last, to preserve predictors during the selection process. Accepted inputs are:
+#' \itemize{
+#'   \item **"auto"** (default): if `response` is not NULL, calls [preference_order()] for internal computation.
+#'   \item **character vector**: predictor names in a custom preference order.
+#'   \item **data frame**: output of [preference_order()] from `response` of length one.
+#'   \item **named list**: output of [preference_order()] from `response` of length two or more.
+#'   \item **NULL**: disabled.
+#' }. Default: "auto"
+#' @param f (optional: function) Function to compute preference order. If "auto" (default) or NULL, the output of [f_auto()] for the given data is used:
+#' \itemize{
+#'   \item [f_auc_rf()]: if `response` is binomial.
+#'   \item [f_r2_pearson()]: if `response` and `predictors` are numeric.
+#'   \item [f_v()]: if `response` and `predictors` are categorical.
+#'   \item [f_v_rf_categorical()]: if `response` is categorical and `predictors` are numeric or mixed .
+#'   \item [f_r2_rf()]: in all other cases.
+#' }
+#' Default: NULL
+#' @param max_cor (optional; numeric) Maximum correlation allowed between any pair of variables in `predictors`. Recommended values are between 0.5 and 0.9. Higher values return larger number of predictors with a higher multicollinearity. If NULL, the pairwise correlation analysis is disabled. Default: `0.75`
+#' @param max_vif (optional, numeric) Maximum Variance Inflation Factor allowed during variable selection. Recommended values are between 2.5 and 10. Higher values return larger number of predictors with a higher multicollinearity. If NULL, the variance inflation analysis is disabled. Default: 5.
+#' @param quiet (optional; logical) If FALSE, messages generated during the execution of the function are printed to the console Default: FALSE
+#'
+#' @return
+#' \itemize{
+#'   \item character vector if `response` is NULL or is a string.
+#'   \item named list if `response` is a character vector.
+#' }
 #'
 #' @examples
-#'
-#' data(
-#'   vi,
-#'   vi_predictors
+#' #parallelization setup
+#' future::plan(
+#'   future::multisession,
+#'   workers = 2 #set to parallelly::availableCores() - 1
 #' )
+#'
+#' #progress bar
+#' #progressr::handlers(global = TRUE)
 #'
 #' #subset to limit example run time
-#' vi <- vi[1:1000, ]
+#' df <- vi[1:500, ]
 #'
-#' #without response
-#' #without preference_order
-#' #permissive max_cor and max_vif
-#' #only numeric variables in output
-#' selected.predictors <- collinear(
-#'   df = vi,
-#'   predictors = vi_predictors,
-#'   max_cor = 0.8,
-#'   max_vif = 10
+#' #predictors has mixed types
+#' #small subset to speed example up
+#' predictors <- c(
+#'   "swi_mean",
+#'   "soil_type",
+#'   "soil_temperature_mean",
+#'   "growing_season_length",
+#'   "rainfall_mean"
 #'   )
 #'
-#' selected.predictors
 #'
-#' #without response
-#' #without preference_order
-#' #restrictive max_cor and max_vif
-#' #only numeric variables in output
-#' selected.predictors <- collinear(
-#'   df = vi,
-#'   predictors = vi_predictors,
-#'   max_cor = 0.5,
-#'   max_vif = 2.5
+#' #with numeric responses
+#' #--------------------------------
+#' #  target encoding
+#' #  automated preference order
+#' #  all predictors filtered by correlation and VIF
+#' x <- collinear(
+#'   df = df,
+#'   response = c(
+#'     "vi_numeric",
+#'     "vi_binomial"
+#'     ),
+#'   predictors = predictors
 #' )
 #'
-#' selected.predictors
+#' x
 #'
-#' #with response
-#' #without preference_order
-#' #restrictive max_cor and max_vif
-#' #numerics and categorical variables in output
-#' selected.predictors <- collinear(
-#'   df = vi,
-#'   response = "vi_mean",
-#'   predictors = vi_predictors,
-#'   max_cor = 0.5,
-#'   max_vif = 2.5
-#' )
 #'
-#' selected.predictors
-#'
-#' #with response
-#' #with user-defined preference_order
-#' #restrictive max_cor and max_vif
-#' #numerics and categorical variables in output
-#' selected.predictors <- collinear(
-#'   df = vi,
-#'   response = "vi_mean",
-#'   predictors = vi_predictors,
+#' #with custom preference order
+#' #--------------------------------
+#' x <- collinear(
+#'   df = df,
+#'   response = "vi_numeric",
+#'   predictors = predictors,
 #'   preference_order = c(
-#'     "soil_temperature_mean",
 #'     "swi_mean",
-#'     "rainfall_mean",
-#'     "evapotranspiration_mean"
-#'   ),
-#'   max_cor = 0.5,
-#'   max_vif = 2.5
+#'     "soil_type"
+#'   )
 #' )
 #'
-#' selected.predictors
 #'
-#'
-#' #with response
-#' #with automated preference_order
-#' #restrictive max_cor and max_vif
-#' #numerics and categorical variables in output
-#' preference.order <- preference_order(
-#'   df = vi,
-#'   response = "vi_mean",
-#'   predictors = vi_predictors,
-#'   f = f_rsquared, #cor(response, predictor)
-#'   workers = 1
+#' #pre-computed preference order
+#' #--------------------------------
+#' preference_df <- preference_order(
+#'   df = df,
+#'   response = "vi_numeric",
+#'   predictors = predictors
 #' )
 #'
-#' selected.predictors <- collinear(
-#'   df = vi,
-#'   response = "vi_mean",
-#'   predictors = vi_predictors,
-#'   preference_order = preference.order,
-#'   max_cor = 0.5,
-#'   max_vif = 2.5
+#' x <- collinear(
+#'   df = df,
+#'   response = "vi_numeric",
+#'   predictors = predictors,
+#'   preference_order = preference_df
 #' )
 #'
-#' selected.predictors
+#' #resetting to sequential processing
+#' future::plan(future::sequential)
 #'
 #' @autoglobal
-#' @author Blas M. Benito
 #' @references
 #' \itemize{
-#'  \item David A. Belsley, D.A., Kuh, E., Welsch, R.E. (1980). Regression Diagnostics: Identifying Influential Data and Sources of Collinearity. John Wiley & Sons. \doi{10.1002/0471725153}.
-#'  \item Micci-Barreca, D. (2001) A Preprocessing Scheme for High-Cardinality Categorical Attributes in Classification and Prediction Problems. SIGKDD Explor. Newsl. 3, 1, 27-32 \doi{10.1145/507533.507538}
+#'  \item David A. Belsley, D.A., Kuh, E., Welsch, R.E. (1980). Regression Diagnostics: Identifying Influential Data and Sources of Collinearity. John Wiley & Sons. DOI: 10.1002/0471725153.
+#'  \item Micci-Barreca, D. (2001) A Preprocessing Scheme for High-Cardinality Categorical Attributes in Classification and Prediction Problems. SIGKDD Explor. Newsl. 3, 1, 27-32. DOI: 10.1145/507533.507538
 #' }
+#' @family automated_multicollinearity_analysis
 #' @export
 collinear <- function(
     df = NULL,
     response = NULL,
     predictors = NULL,
-    preference_order = NULL,
-    cor_method = "pearson",
+    encoding_method = "loo",
+    preference_order = "auto",
+    f = "auto",
     max_cor = 0.75,
     max_vif = 5,
-    encoding_method = "mean"
+    quiet = FALSE
 ){
 
-  #validate input data frame
-  df <- validate_df(
-    df = df,
-    min_rows = ifelse(
-      test = cor_method == "pearson",
-      yes = 30,
-      no = 10
-    )
-  )
-
-  #validate predictors
-  predictors <- validate_predictors(
-    df = df,
-    response = response,
-    predictors = predictors,
-    min_numerics = 0
-  )
-
-  #validate response
-  response <- validate_response(
-    df = df,
-    response = response
-  )
-
-  #target encode character predictors
-  df <- target_encoding_lab(
-    df = df,
-    response = response,
-    predictors = predictors,
-    encoding_methods = encoding_method,
-    replace = TRUE,
-    verbose = FALSE
-  )
-
-  #use only numeric predictors if the response is NULL
-  if(is.null(response)){
-    predictors <- identify_numeric_predictors(
-      df = df,
-      predictors = predictors
-    )
+  if(!is.logical(quiet)){
+    message("\ncollinear::collinear(): argument 'quiet' must be logical, resetting it to FALSE.")
+    quiet <- FALSE
   }
 
-  #applying cor selection
-  selected.predictors <- cor_select(
+  #validate df
+  df <- validate_df(
     df = df,
-    response = response,
-    predictors = predictors,
-    preference_order = preference_order,
-    cor_method = cor_method,
-    max_cor = max_cor
+    quiet = quiet
   )
 
-  #applying vif selection
-  selected.predictors <- vif_select(
-    df = df,
-    response = response,
-    predictors = selected.predictors,
-    preference_order = preference_order,
-    max_vif = max_vif
+  #managing multiple responses
+  responses <- intersect(
+    x = colnames(df),
+    y = response
   )
 
-  selected.predictors
+  #reorder responses
+  responses <- na.omit(responses[match(response, responses)])
+  rm(response)
 
+  #copy of preference order to avoid overwriting in loop
+  preference_order_user <- preference_order
+
+  #output list
+  out <- list()
+
+  #iterate over responses
+  #runs even when responses is NULL
+  for(
+    response in
+    if (is.null(responses)) list(NULL) else responses
+  ){
+
+    if(is.list(response)){
+      response <- NULL
+    }
+
+    #validate response
+    response <- validate_response(
+      df = df,
+      response = response,
+      quiet = quiet
+    )
+
+    if(!is.null(response)){
+
+      if(quiet == FALSE){
+
+        message("\ncollinear::collinear(): processing response '", response, "'." )
+        message("---------------------------------------------------------------")
+
+      }
+
+    }
+
+    #reset and validate predictors
+    predictors.response <- validate_predictors(
+      df = df,
+      response = response,
+      predictors = predictors
+    )
+
+    # target encoding ----
+    #ignored if:
+    # response == NULL
+    # encoding_method == NULL
+    df.response <- target_encoding_lab(
+      df = df,
+      response = response,
+      predictors = predictors.response,
+      methods = encoding_method[1],
+      overwrite = TRUE,
+      quiet = quiet
+    )
+
+    #compute preference order
+    preference_order <- preference_order_collinear(
+      df = df.response,
+      response = response,
+      predictors = predictors.response,
+      preference_order = preference_order_user,
+      f = f,
+      quiet = quiet
+    )
+
+    # correlation filter ----
+    selection.cor <- cor_select(
+      df = df.response,
+      predictors = predictors.response,
+      preference_order = preference_order,
+      max_cor = max_cor,
+      quiet = quiet
+    )
+
+    # vif filter ----
+
+    #selection by numeric and categorial
+    #this section lets vif_select() yield a message
+    #about the categorical variables it is ignoring
+    if(is.null(max_cor)){
+
+      selection.cor.type <- list(
+        numeric = selection.cor,
+        categorical = NULL
+      )
+
+    } else {
+
+      #separate numeric and categorical
+      selection.cor.type <- identify_predictors(
+        df = df.response,
+        predictors = selection.cor
+      )
+
+    }
+
+    #run vif filtering
+    selection.vif <- vif_select(
+      df = df.response,
+      predictors = selection.cor.type$numeric,
+      preference_order = preference_order,
+      max_vif = max_vif,
+      quiet = quiet
+    )
+
+    #merge selections
+    selection <- c(
+      selection.vif,
+      selection.cor.type$categorical
+    ) |>
+      unique() |>
+      na.omit()
+
+    #order as in preference order
+    if(all(selection %in% preference_order)){
+
+      selection <- selection[order(match(selection, preference_order))]
+
+    }
+
+    #message with selection if required
+    if(
+      (
+        length(selection.cor.type$categorical) > 0 &&
+        !is.null(max_vif) &&
+        any(!selection.cor.type$numeric %in% selection.vif)
+      ) &&
+      quiet == FALSE
+    ){
+
+      message(
+        "\ncollinear::collinear(): selected predictors: \n - ",
+        paste(selection, collapse = "\n - ")
+      )
+
+    }
+
+    #add validated
+    attr(
+      x = selection,
+      which = "validated"
+    ) <- TRUE
+
+    if(!is.null(response)){
+
+      attributes(response) <- NULL
+
+      attr(
+        x = selection,
+        which = "response"
+      ) <- response
+
+      if(length(responses) > 1){
+        out[[response]] <- selection
+      } else {
+        out <- selection
+      }
+
+    } else {
+      out <- selection
+    }
+
+    rm(selection)
+
+  } #end of loop
+
+  out
 
 }

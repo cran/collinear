@@ -1,7 +1,10 @@
 testthat::test_that("`validate_df()` works", {
+
   data(vi)
   vi <- validate_df(df = vi)
+
   testthat::expect_true(attributes(vi)$validated)
+
 })
 
 testthat::test_that("`validate_predictors()` works", {
@@ -10,17 +13,25 @@ testthat::test_that("`validate_predictors()` works", {
 
   vi <- validate_df(df = vi)
 
+  vi_numerics <- identify_predictors_numeric(
+    df = vi
+  )
+
   #without predictors
   #without response
-  #must contain all df columns
+  #must contain only numeric columns
   predictors <- validate_predictors(
     df = vi
     )
 
-  testthat::expect_true(attributes(predictors)$validated)
+  testthat::expect_true(
+    attributes(predictors)$validated
+    )
+
   testthat::expect_true(
     length(predictors) == ncol(vi)
   )
+
   testthat::expect_true(
     all(predictors %in% colnames(vi))
   )
@@ -30,11 +41,11 @@ testthat::test_that("`validate_predictors()` works", {
   #must contain all df columns but the response
   predictors <- validate_predictors(
     df = vi,
-    response = "vi_mean"
+    response = "vi_numeric"
   )
 
   testthat::expect_true(
-    !("vi_mean" %in% predictors)
+    !("vi_numeric" %in% predictors)
   )
 
   #with predictors
@@ -42,7 +53,7 @@ testthat::test_that("`validate_predictors()` works", {
   #must contain all predictors
   predictors <- validate_predictors(
     df = vi,
-    response = "vi_mean",
+    response = "vi_numeric",
     predictors = vi_predictors
   )
 
@@ -53,8 +64,18 @@ testthat::test_that("`validate_predictors()` works", {
 })
 
 testthat::test_that("`validate_response()` works", {
+
   data(vi)
+
   vi <- validate_df(df = vi)
-  response <- validate_response(df = vi, response = "vi_mean")
-  testthat::expect_true(attributes(response)$validated)
+
+  response <- validate_response(
+    df = vi,
+    response = "vi_numeric"
+    )
+
+  testthat::expect_true(
+    attributes(response)$validated
+    )
+
 })

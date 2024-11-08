@@ -2,9 +2,9 @@
 #'
 #' @description
 #'
-#' The [cramer_v()] function calculates bias-corrected Cramer's V, a measure of association between two categorical variables.
+#' Computes bias-corrected Cramer's V (extension of the chi-squared test), a measure of association between two categorical variables. Results are in the range 0-1, where 0 indicates no association, and 1 indicates a perfect association.
 #'
-#' Cramer's V is an extension of the chi-squared test to measure the strength of association between two categorical variables. Provides values between 0 and 1, where 0 indicates no association, and 1 indicates a perfect association. In essence, Cramer's V assesses the co-occurrence of the categories of two variables to quantify how strongly these variables are related.
+#' In essence, Cramer's V assesses the co-occurrence of the categories of two variables to quantify how strongly these variables are related.
 #'
 #' Even when its range is between 0 and 1, Cramer's V values are not directly comparable to R-squared values, and as such, a multicollinearity analysis containing both types of values must be assessed with care. It is probably preferable to convert non-numeric variables to numeric using target encoding rather before a multicollinearity analysis.
 #'
@@ -12,7 +12,7 @@
 #' @param y (required; character vector) character vector representing a categorical variable. Must have the same length as 'x'. Default: NULL
 #' @param check_input (required; logical) If FALSE, disables data checking for a slightly faster execution. Default: TRUE
 #'
-#' @return Numeric, value of Cramer's V
+#' @return numeric: Cramer's V
 #'
 #' @examples
 #'
@@ -23,7 +23,7 @@
 #' vi <- vi[1:1000, ]
 #'
 #' #computing Cramer's V for two categorical predictors
-#' v <- cramer_v(
+#' v <- cor_cramer_v(
 #'   x = vi$soil_type,
 #'   y = vi$koppen_zone
 #'   )
@@ -31,13 +31,14 @@
 #' v
 #'
 #' @autoglobal
-#' @author Blas M. Benito
+#' @family pairwise_correlation
+#' @author Blas M. Benito, PhD
 #' @references
 #' \itemize{
 #'  \item Cramér, H. (1946). Mathematical Methods of Statistics. Princeton: Princeton University Press, page 282 (Chapter 21. The two-dimensional case). ISBN 0-691-08004-6
 #' }
 #' @export
-cramer_v <- function(
+cor_cramer_v <- function(
     x = NULL,
     y = NULL,
     check_input = TRUE
@@ -48,27 +49,42 @@ cramer_v <- function(
 
     # Check if 'x' and 'y' have the same length
     if(length(x) != length(y)){
-      stop("arguments 'x' and 'y' must have the same length.")
+      stop(
+        "collinear::cor_cramer_v(): arguments 'x' and 'y' must have the same length.",
+        call. = FALSE
+        )
     }
 
     # Check if 'x' is not NULL
     if(is.null(x)){
-      stop("argument 'x' must not be NULL.")
+      stop(
+        "collinear::cor_cramer_v(): argument 'x' must not be NULL.",
+        call. = FALSE
+      )
     }
 
     # Check if 'y' is not NULL
     if(is.null(y)){
-      stop("argument 'y' must not be NULL.")
+      stop(
+        "collinear::cor_cramer_v(): argument 'y' must not be NULL.",
+        call. = FALSE
+      )
     }
 
     # Check if 'x' is a character vector
     if(is.numeric(x)){
-      stop("Argument 'x' must be of class 'character' or 'factor', but it is 'numeric'.")
+      stop(
+        "collinear::cor_cramer_v(): argument 'x' must be of class 'character' or 'factor', but it is 'numeric'.",
+        call. = FALSE
+      )
     }
 
     # Check if 'y' is a character vector
     if(is.numeric(y)){
-      stop("argument 'y' must be of class 'character' or 'factor', but it is 'numeric'.")
+      stop(
+        "collinear::cor_cramer_v(): argument 'y' must be of class 'character' or 'factor', but it is 'numeric'.",
+        call. = FALSE
+      )
     }
 
   }
@@ -115,11 +131,13 @@ cramer_v <- function(
       min(
         c(
           (
-            xy.table.cols - ((xy.table.cols - 1)^2 /
-                               (xy.table.sum - 1))
+            xy.table.cols -
+              ((xy.table.cols - 1)^2 /
+                 (xy.table.sum - 1))
           ) - 1,
-          (xy.table.rows - ((xy.table.rows - 1)^2 /
-                              (xy.table.sum - 1))
+          (xy.table.rows -
+             ((xy.table.rows - 1)^2 /
+                (xy.table.sum - 1))
           ) - 1
         )
       )

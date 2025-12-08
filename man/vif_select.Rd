@@ -2,182 +2,135 @@
 % Please edit documentation in R/vif_select.R
 \name{vif_select}
 \alias{vif_select}
-\title{Automated Multicollinearity Filtering with Variance Inflation Factors}
+\title{Multicollinearity filtering by variance inflation factor threshold}
 \usage{
 vif_select(
   df = NULL,
+  response = NULL,
   predictors = NULL,
   preference_order = NULL,
   max_vif = 5,
-  quiet = FALSE
+  quiet = FALSE,
+  ...
 )
 }
 \arguments{
-\item{df}{(required; data frame, tibble, or sf) A data frame with responses and predictors. Default: NULL.}
+\item{df}{(required; dataframe, tibble, or sf) A dataframe with responses
+(optional) and predictors. Must have at least 10 rows for pairwise
+correlation analysis, and \code{10 * (length(predictors) - 1)} for VIF.
+Default: NULL.}
 
-\item{predictors}{(optional; character vector) Names of the predictors to select from \code{df}. If omitted, all numeric columns in \code{df} are used instead. If argument \code{response} is not provided, non-numeric variables are ignored. Default: NULL}
+\item{response}{(optional; character or NULL) Name of one response variable in \code{df}. Used to exclude columns when \code{predictors} is NULL, and to filter \code{preference_order} when it is a dataframe and contains several responses. Default: NULL.}
 
-\item{preference_order}{(optional; string, character vector, output of \code{\link[=preference_order]{preference_order()}}). Defines a priority order, from first to last, to preserve predictors during the selection process. Accepted inputs are:
-\itemize{
-\item \strong{"auto"} (default): if \code{response} is not NULL, calls \code{\link[=preference_order]{preference_order()}} for internal computation.
-\item \strong{character vector}: predictor names in a custom preference order.
-\item \strong{data frame}: output of \code{\link[=preference_order]{preference_order()}} from \code{response} of length one.
-\item \strong{named list}: output of \code{\link[=preference_order]{preference_order()}} from \code{response} of length two or more.
-\item \strong{NULL}: disabled.
-}. Default: "auto"}
+\item{predictors}{(optional; character vector or NULL) Names of the
+predictors in \code{df}. If NULL, all columns except \code{responses} and
+constant/near-zero-variance columns are used. Default: NULL.}
 
-\item{max_vif}{(optional, numeric) Maximum Variance Inflation Factor allowed during variable selection. Recommended values are between 2.5 and 10. Higher values return larger number of predictors with a higher multicollinearity. If NULL, the variance inflation analysis is disabled. Default: 5.}
+\item{preference_order}{(optional; character vector, dataframe from
+\code{\link{preference_order}}, or NULL) Prioritizes predictors to preserve.}
 
-\item{quiet}{(optional; logical) If FALSE, messages generated during the execution of the function are printed to the console Default: FALSE}
+\item{max_vif}{(optional, numeric or NULL) Maximum Variance Inflation Factor allowed for \code{predictors} during multicollinearity filtering. Recommended values are between 2.5 (strict) and 10 (permissive). Default: 5}
+
+\item{quiet}{(optional; logical) If FALSE, messages are printed. Default: FALSE.}
+
+\item{...}{(optional) Internal args (e.g. \code{function_name} for
+\code{\link{validate_arg_function_name}}, a precomputed correlation matrix
+\code{m}, or cross-validation args for \code{\link{preference_order}}).}
 }
 \value{
-\itemize{
-\item character vector if \code{response} is NULL or is a string.
-\item named list if \code{response} is a character vector.
-}
+character vector of selected predictors
 }
 \description{
-This function automatizes multicollinearity filtering in data frames with numeric predictors by combining two methods:
-\itemize{
-\item \strong{Preference Order}: method to rank and preserve relevant variables during  multicollinearity filtering. See argument \code{preference_order} and function \code{\link[=preference_order]{preference_order()}}.
-\item \strong{VIF-based filtering}: recursive algorithm to identify and remove predictors with a VIF above a given threshold.
+Wraps \code{\link[=collinear_select]{collinear_select()}} to automatize multicollinearity filtering via variance inflation factors (VIF) in dataframes with numeric and categorical predictors.
+
+The argument \code{max_vif} determines the maximum variance inflation factor allowed in the resulting selection of predictors.
+
+The argument \code{preference_order} accepts a character vector of predictor names ranked from first to last index, or a dataframe resulting from \code{\link[=preference_order]{preference_order()}}. When two predictors in this vector or dataframe are highly collinear, the one with a lower ranking is removed. This option helps protect predictors of interest. If not provided, predictors are ranked from lower to higher multicollinearity.
+
+Please check the sections \strong{Variance Inflation Factors} and \strong{VIF-based Filtering} at the end of this help file for further details.
 }
-
-When the argument \code{preference_order} is not provided, the predictors are ranked lower to higher VIF. The predictor selection resulting from this option, albeit diverse and uncorrelated, might not be the one with the highest overall predictive power when used in a model.
-
-Please check the sections \strong{Preference Order}, \strong{Variance Inflation Factors}, and \strong{VIF-based Filtering} at the end of this help file for further details.
-}
-\section{Preference Order}{
-
-
-This feature is designed to help protect important predictors during the multicollinearity filtering. It involves the arguments \code{preference_order} and \code{f}.
-
-The argument \code{preference_order} accepts:
-\itemize{
-\item: A character vector of predictor names in a custom order of preference, from first to last. This vector does not need to contain all predictor names, but only the ones relevant to the user.
-\item A data frame returned by \code{\link[=preference_order]{preference_order()}}, which ranks predictors based on their association with a response variable.
-\item If NULL, and \code{response} is provided, then \code{\link[=preference_order]{preference_order()}} is used internally to rank the predictors using the function \code{f}. If \code{f} is NULL as well, then \code{\link[=f_auto]{f_auto()}} selects a proper function based on the data properties.
-}
-}
-
 \section{Variance Inflation Factors}{
 
 
-The Variance Inflation Factor for a given variable \eqn{a} is computed as \eqn{1/(1-R2)}, where \eqn{R2} is the multiple R-squared of a multiple regression model fitted using \eqn{a} as response and all other predictors in the input data frame as predictors, as in  \eqn{a = b + c + ...}.
-
-The square root of the VIF of \eqn{a} is the factor by which the confidence interval of the estimate for \eqn{a} in the linear model \eqn{y = a + b + c + ...}` is widened by multicollinearity in the model predictors.
-
-The range of VIF values is (1, Inf]. The recommended thresholds for maximum VIF may vary depending on the source consulted, being the most common values, 2.5, 5, and 10.
+VIF for predictor \eqn{a} is computed as \eqn{1/(1-R^2)}, where \eqn{R^2} is
+the multiple R-squared from regressing \eqn{a} on the other predictors.
+Recommended maximums commonly used are 2.5, 5, and 10.
 }
 
 \section{VIF-based Filtering}{
 
 
-The function \code{\link[=vif_select]{vif_select()}} computes Variance Inflation Factors and removes variables iteratively, until all variables in the resulting selection have a VIF below \code{max_vif}.
-
-If the argument \code{preference_order} is not provided, all variables are ranked from lower to higher VIF, as returned by \code{\link[=vif_df]{vif_df()}}, and the variable with the higher VIF above \code{max_vif} is removed on each iteration.
-
-If \code{preference_order} is defined, whenever two or more variables are above \code{max_vif}, the one higher in \code{preference_order} is preserved, and the next one with a higher VIF is removed. For example, for the predictors and preference order \eqn{a} and \eqn{b}, if any of their VIFs is higher than \code{max_vif}, then \eqn{b} will be removed no matter whether its VIF is lower or higher than \eqn{a}'s VIF. If their VIF scores are lower than \code{max_vif}, then both are preserved.
+\code{\link{vif_select}} ranks numeric predictors (user \code{preference_order}
+if provided, otherwise from lower to higher VIF) and sequentially adds
+predictors whose VIF against the current selection is below \code{max_vif}.
 }
 
 \examples{
-#subset to limit example run time
-df <- vi[1:1000, ]
-predictors <- vi_predictors[1:10]
-predictors_numeric <- vi_predictors_numeric[1:10]
+data(vi_smol)
 
-#predictors has mixed types
-sapply(
-  X = df[, predictors, drop = FALSE],
-  FUN = class
+## OPTIONAL: parallelization setup
+## irrelevant when all predictors are numeric
+## only worth it for large data with many categoricals
+# future::plan(
+#   future::multisession,
+#   workers = future::availableCores() - 1
+# )
+
+## OPTIONAL: progress bar
+# progressr::handlers(global = TRUE)
+
+#predictors
+predictors = c(
+  "koppen_zone", #character
+  "soil_type", #factor
+  "topo_elevation", #numeric
+  "soil_temperature_mean" #numeric
 )
 
-#categorical predictors are ignored
+#predictors ordered from lower to higher multicollinearity
 x <- vif_select(
-  df = df,
+  df = vi_smol,
   predictors = predictors,
-  max_vif = 2.5
-)
-
-x
-
-#all these have a VIF lower than max_vif (2.5)
-vif_df(
-  df = df,
-  predictors = x
-)
-
-
-#higher max_vif results in larger selection
-x <- vif_select(
-  df = df,
-  predictors = predictors_numeric,
-  max_vif = 10
+  max_vif = 5
 )
 
 x
 
 
-#smaller max_vif results in smaller selection
+#with custom preference order
 x <- vif_select(
-  df = df,
-  predictors = predictors_numeric,
-  max_vif = 2.5
-)
-
-x
-
-
-#custom preference order
-x <- vif_select(
-  df = df,
-  predictors = predictors_numeric,
+  df = vi_smol,
+  predictors = predictors,
   preference_order = c(
-    "swi_mean",
-    "soil_temperature_mean",
-    "topo_elevation"
+    "koppen_zone",
+    "soil_type"
   ),
-  max_vif = 2.5
+  max_vif = 5
 )
 
 x
 
-#using automated preference order
+
+#with automated preference order
 df_preference <- preference_order(
-  df = df,
+  df = vi_smol,
   response = "vi_numeric",
-  predictors = predictors_numeric
+  predictors = predictors
 )
 
-x <- vif_select(
-  df = df,
-  predictors = predictors_numeric,
+df_preference
+
+x <- cor_select(
+  df = vi_smol,
+  predictors = predictors,
   preference_order = df_preference,
-  max_vif = 2.5
+  max_cor = 0.7
 )
 
 x
 
-
-#categorical predictors are ignored
-#the function returns NA
-x <- vif_select(
-  df = df,
-  predictors = vi_predictors_categorical
-)
-
-x
-
-
-#if predictors has length 1
-#selection is skipped
-#and data frame with one row is returned
-x <- vif_select(
-  df = df,
-  predictors = predictors_numeric[1]
-)
-
-x
+## OPTIONAL: disable parallelization
+#future::plan(future::sequential)
 }
 \references{
 \itemize{
@@ -185,10 +138,13 @@ x
 }
 }
 \seealso{
-Other vif: 
-\code{\link{vif_df}()}
+Other multicollinearity_filtering: 
+\code{\link{collinear}()},
+\code{\link{collinear_select}()},
+\code{\link{cor_select}()},
+\code{\link{step_collinear}()}
 }
 \author{
 Blas M. Benito, PhD
 }
-\concept{vif}
+\concept{multicollinearity_filtering}

@@ -2,33 +2,54 @@
 % Please edit documentation in R/case_weights.R
 \name{case_weights}
 \alias{case_weights}
-\title{Case Weights for Unbalanced Binomial or Categorical Responses}
+\title{Generate sample weights for imbalanced responses}
 \usage{
-case_weights(x = NULL)
+case_weights(x = NULL, ...)
 }
 \arguments{
-\item{x}{(required, integer, character, or factor vector) binomial, categorical, or factor response variable. Default: \code{NULL}}
+\item{x}{(required, integer, character, or factor vector) Values of a binomial, categorical, or factor variable. Default: NULL}
+
+\item{...}{(optional) Internal args (e.g. \code{function_name} for
+\code{\link{validate_arg_function_name}}, a precomputed correlation matrix
+\code{m}, or cross-validation args for \code{\link{preference_order}}).}
 }
 \value{
 numeric vector: case weights
 }
 \description{
-Case Weights for Unbalanced Binomial or Categorical Responses
+Computes case weights adding to one for response variables of these types:
+
+\itemize{
+\item numeric binomial (1 and 0).
+\item logical (TRUE and FALSE): converted to numeric internally.
+\item categorical (character or factor)
+}
+
+Values NA, Inf, -Inf, and NaN are invalid for numeric and logical variables and will result in errors. For categorical variables, these are converted to their respective categories ("NA", "Inf", "-Inf", and "NaN") with their assigned case weights.
+
+All returned weights sum to one.
 }
 \examples{
- case_weights(
-   x = c(0, 0, 0, 1, 1)
+ #numeric vector
+ y <- case_weights(
+   x = c(0, 0, 1, 1)
    )
 
- case_weights(
-   x = c("a", "a", "b", "b", "c")
+ #logical vector
+ y <- case_weights(
+   x = c(TRUE, TRUE, FALSE, FALSE)
+   )
+
+ #character vector
+ y <- case_weights(
+   x = c("a", "a", "b", "c")
    )
 }
 \seealso{
 Other modelling_tools: 
 \code{\link{model_formula}()},
-\code{\link{performance_score_auc}()},
-\code{\link{performance_score_r2}()},
-\code{\link{performance_score_v}()}
+\code{\link{score_auc}()},
+\code{\link{score_cramer}()},
+\code{\link{score_r2}()}
 }
 \concept{modelling_tools}

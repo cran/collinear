@@ -2,22 +2,66 @@
 % Please edit documentation in R/drop_geometry_column.R
 \name{drop_geometry_column}
 \alias{drop_geometry_column}
-\title{Removes geometry column in sf data frames}
+\title{Removes \code{geometry} Column From \code{sf} Dataframes}
 \usage{
-drop_geometry_column(df = NULL, quiet = FALSE)
+drop_geometry_column(df = NULL, quiet = FALSE, ...)
 }
 \arguments{
-\item{df}{(required; data frame, tibble, or sf) A data frame with responses and predictors. Default: NULL.}
+\item{df}{(required; dataframe, tibble, or sf) A dataframe with responses
+(optional) and predictors. Must have at least 10 rows for pairwise
+correlation analysis, and \code{10 * (length(predictors) - 1)} for VIF.
+Default: NULL.}
 
-\item{quiet}{(optional; logical) If FALSE, messages generated during the execution of the function are printed to the console Default: FALSE}
+\item{quiet}{(optional; logical) If FALSE, messages are printed. Default: FALSE.}
+
+\item{...}{(optional) Internal args (e.g. \code{function_name} for
+\code{\link{validate_arg_function_name}}, a precomputed correlation matrix
+\code{m}, or cross-validation args for \code{\link{preference_order}}).}
 }
 \value{
-data frame
+dataframe
 }
 \description{
-Replicates the functionality of  \code{sf::st_drop_geometry()} without depending on the \code{sf} package.
+Remove geometry column from sf objects
+}
+\examples{
+data(vi_smol)
+
+#creating fake geometry column without sf loaded
+vi_smol$geometry <- NA
+attr(
+  x = vi_smol,
+  which = "sf_column"
+  ) <- "geometry"
+
+#check new attribute
+attributes(vi_smol)$sf_column
+
+#drop geometry column
+df <- drop_geometry_column(
+  df = vi_smol
+  )
+
+#checking that the geometry was droppped
+"geometry" \%in\% colnames(df)
+attributes(df)$sf_column
+
+}
+\seealso{
+Other argument_validation: 
+\code{\link{validate_arg_df}()},
+\code{\link{validate_arg_df_not_null}()},
+\code{\link{validate_arg_encoding_method}()},
+\code{\link{validate_arg_f}()},
+\code{\link{validate_arg_function_name}()},
+\code{\link{validate_arg_max_cor}()},
+\code{\link{validate_arg_max_vif}()},
+\code{\link{validate_arg_predictors}()},
+\code{\link{validate_arg_preference_order}()},
+\code{\link{validate_arg_quiet}()},
+\code{\link{validate_arg_responses}()}
 }
 \author{
 Blas M. Benito, PhD
 }
-\concept{data_preparation}
+\concept{argument_validation}

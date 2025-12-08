@@ -1,23 +1,21 @@
 testthat::test_that("`preference_order()` works", {
+  testthat::skip_on_cran()
 
   expected_colnames <- c(
     "response",
     "predictor",
     "f",
-    "preference"
+    "metric",
+    "score",
+    "rank"
   )
 
   data(
-    vi,
+    vi_smol,
     vi_predictors,
-    vi_predictors_categorical
+    vi_predictors_categorical,
+    vi_predictors_numeric
   )
-
-  #subsets to limit example run time
-  vi <- vi[1:1000, ]
-  vi_predictors <- vi_predictors[1:10]
-  vi_predictors_numeric <- vi_predictors_numeric[1:10]
-  vi_predictors_categorical <- vi_predictors_categorical[1:10]
 
   #several responses
   responses <- c(
@@ -28,183 +26,365 @@ testthat::test_that("`preference_order()` works", {
     "vi_factor"
   )
 
-  df_preference <- preference_order(
-    df = vi,
-    response = responses,
-    predictors = vi_predictors,
-    quiet = TRUE,
-    warn_limit = NULL
+  #empty args
+
+  testthat::expect_error(
+    x <- preference_order(
+      df = NULL,
+      responses = NULL,
+      predictors = NULL,
+      f = NULL
+    ),
+    regexp = "argument 'df' cannot be NULL"
   )
 
-  testthat::expect_true(
-    is.list(df_preference)
-  )
-
-  testthat::expect_true(
-    all(names(df_preference) %in% responses)
-  )
-
-  testthat::expect_true(
-    all(colnames(df_preference[[1]]) %in% expected_colnames)
-  )
-
-  #numeric response
+  #default behavior without response and f
   testthat::expect_message(
-    df_preference <- preference_order(
-      df = vi,
-      response = "vi_numeric",
-      predictors = vi_predictors,
+    x <- preference_order(
+      df = vi_smol,
+      responses = NULL,
+      predictors = vi_predictors_numeric,
       f = NULL,
-      warn_limit = NULL
-    )
+      quiet = FALSE
+    ),
+    regexp = "predictors' from lower to higher multicollinearity"
   ) |>
     suppressMessages()
 
   testthat::expect_true(
-    is.data.frame(df_preference)
+    unique(x$metric) == "1 - R-squared"
   )
 
   testthat::expect_true(
-    ncol(df_preference) == length(expected_colnames)
+    unique(x$response) == "none"
+  )
+
+  #no predictors
+  x <- preference_order(
+    df = vi_smol,
+    responses = "vi_numeric",
+    predictors = NULL,
+    f = f_auto,
+    quiet = TRUE
+  )
+
+  #all df column names but vi_numeric
+  testthat::expect_true(
+    sum(colnames(vi_smol) %in% x$predictor) == ncol(vi_smol) - 1
   )
 
   testthat::expect_true(
-    nrow(df_preference) == length(vi_predictors)
+    !"vi_numeric" %in% x$predictor
   )
 
   testthat::expect_true(
-    all(colnames(df_preference) %in% expected_colnames)
+    "vi_numeric" %in% x$response
   )
 
+  testthat::expect_message(
+    x <- preference_order(
+      df = vi_smol,
+      response = "vi_numeric",
+      predictors = vi_predictors,
+      f = f_auto,
+      cv_iterations = NULL,
+      quiet = FALSE
+    ),
+    regexp = "argument 'cv_iterations' must be a positive integer."
+  ) |>
+    suppressMessages()
+
+  testthat::expect_message(
+    x <- preference_order(
+      df = vi_smol,
+      response = "vi_numeric",
+      predictors = vi_predictors,
+      f = f_auto,
+      cv_iterations = 1,
+      cv_training_fraction = NULL,
+      quiet = FALSE
+    ),
+    regexp = "argument 'cv_training_fraction' must be a numeric between 0.1 and 1"
+  ) |>
+    suppressMessages()
+
+  testthat::expect_message(
+    x <- preference_order(
+      df = vi_smol,
+      response = "vi_numeric",
+      predictors = vi_predictors,
+      f = f_auto,
+      cv_iterations = 1,
+      cv_training_fraction = 1,
+      seed = NULL,
+      quiet = FALSE
+    ),
+    regexp = "argument 'seed' is invalid, resetting it to '1'"
+  ) |>
+    suppressMessages()
+
+  #full use case
+
+  #test that one message per response is printed
+  testthat::expect_message(
+    x <- preference_order(
+      df = vi_smol,
+      response = c("vi_numeric", "vi_binomial"),
+      predictors = vi_predictors_numeric,
+      f = f_auto,
+      quiet = FALSE
+    ),
+    regexp = "processing response 'vi_numeric'"
+  ) |>
+    suppressMessages()
+
+  testthat::expect_message(
+    x <- preference_order(
+      df = vi_smol,
+      response = c("vi_numeric", "vi_binomial"),
+      predictors = vi_predictors_numeric,
+      f = f_auto,
+      quiet = FALSE
+    ),
+    regexp = "processing response 'vi_binomial'"
+  ) |>
+    suppressMessages()
+
+  testthat::expect_true(
+    is.data.frame(x)
+  )
+
+  testthat::expect_true(
+    all(c("vi_numeric", "vi_binomial") %in% x$response)
+  )
+
+  testthat::expect_true(
+    all(colnames(x) %in% expected_colnames)
+  )
+
+  #numeric response
+
+  ##all types
+  x <- preference_order(
+    df = vi_smol,
+    response = "vi_numeric",
+    predictors = vi_predictors,
+    f = f_numeric_rf,
+    quiet = TRUE
+  )
+
+  testthat::expect_true(
+    is.data.frame(x)
+  )
+
+  testthat::expect_true(
+    unique(x$f) == "f_numeric_rf"
+  )
+
+  testthat::expect_true(
+    nrow(x) == length(vi_predictors)
+  )
+
+  testthat::expect_true(
+    all(colnames(x) %in% expected_colnames)
+  )
+
+  testthat::expect_message(
+    x <- preference_order(
+      df = vi_smol,
+      response = "vi_numeric",
+      predictors = vi_predictors,
+      f = f_auto,
+      quiet = FALSE
+    ),
+    regexp = "f_numeric_rf"
+  ) |>
+    suppressMessages()
+
+  testthat::expect_true(
+    is.data.frame(x)
+  )
+
+  testthat::expect_true(
+    unique(x$f) == "f_numeric_rf"
+  )
+
+  testthat::expect_true(
+    nrow(x) == length(vi_predictors)
+  )
+
+  testthat::expect_true(
+    all(colnames(x) %in% expected_colnames)
+  )
 
   #count response
-  df_preference <- preference_order(
-    df = vi,
+
+  ## all types
+  x <- preference_order(
+    df = vi_smol,
     response = "vi_counts",
     predictors = vi_predictors_numeric,
-    f = f_r2_glm_poisson,
-    warn_limit = NULL,
+    f = f_count_glm,
     quiet = TRUE
   )
 
   testthat::expect_true(
-    is.data.frame(df_preference)
+    is.data.frame(x)
   )
 
   testthat::expect_true(
-    ncol(df_preference) == length(expected_colnames)
-  )
-
-
-  testthat::expect_true(
-    nrow(df_preference) >= 1
+    unique(x$f) == "f_count_glm"
   )
 
   testthat::expect_true(
-    nrow(df_preference) == length(vi_predictors_numeric)
+    nrow(x) == length(vi_predictors_numeric)
   )
 
   testthat::expect_true(
-    all(colnames(df_preference) %in% expected_colnames)
+    all(colnames(x) %in% expected_colnames)
   )
 
-
-
+  #wrong f function
+  testthat::expect_error(
+    x <- preference_order(
+      df = vi_smol,
+      response = "vi_numeric",
+      predictors = vi_predictors_numeric,
+      f = f_categorical_rf,
+      quiet = FALSE
+    ),
+    regexp = "column 'y' of dataframe 'df' must be character or factor"
+  ) |>
+    suppressMessages()
 
   #binomial response
-  df_preference <- preference_order(
-    df = vi,
+  x <- preference_order(
+    df = vi_smol,
     response = "vi_binomial",
     predictors = vi_predictors_numeric,
-    f = f_auc_glm_binomial,
-    warn_limit = NULL,
+    f = f_binomial_glm,
     quiet = TRUE
   )
 
   testthat::expect_true(
-    is.data.frame(df_preference)
+    is.data.frame(x)
   )
 
   testthat::expect_true(
-    ncol(df_preference) == length(expected_colnames)
-  )
-
-
-  testthat::expect_true(
-    nrow(df_preference) >= 1
+    unique(x$f) == "f_binomial_glm"
   )
 
   testthat::expect_true(
-    nrow(df_preference) == length(vi_predictors_numeric)
+    nrow(x) == length(vi_predictors_numeric)
   )
 
   testthat::expect_true(
-    all(colnames(df_preference) %in% expected_colnames)
+    all(colnames(x) %in% expected_colnames)
   )
 
-
+  testthat::expect_message(
+    x <- preference_order(
+      df = vi_smol,
+      response = "vi_binomial",
+      predictors = vi_predictors,
+      f = f_auto,
+      quiet = FALSE
+    ),
+    regexp = "f_binomial_rf"
+  ) |>
+    suppressMessages()
 
   #categorical response and predictors
-  df_preference <- preference_order(
-    df = vi,
+  x <- preference_order(
+    df = vi_smol,
     response = "vi_categorical",
     predictors = vi_predictors_categorical,
-    f = f_v,
-    warn_limit = NULL,
+    f = f_categorical_rf,
     quiet = TRUE
   )
 
   testthat::expect_true(
-    is.data.frame(df_preference)
+    is.data.frame(x)
   )
 
   testthat::expect_true(
-    ncol(df_preference) == length(expected_colnames)
-  )
-
-
-  testthat::expect_true(
-    nrow(df_preference) >= 1
+    unique(x$f) == "f_categorical_rf"
   )
 
   testthat::expect_true(
-    nrow(df_preference) == length(vi_predictors_categorical)
+    nrow(x) == length(vi_predictors_categorical)
   )
 
   testthat::expect_true(
-    all(colnames(df_preference) %in% expected_colnames)
+    all(colnames(x) %in% expected_colnames)
   )
+
+  testthat::expect_message(
+    x <- preference_order(
+      df = vi_smol,
+      response = "vi_categorical",
+      predictors = vi_predictors_categorical,
+      f = f_auto,
+      quiet = FALSE
+    ),
+    regexp = "f_categorical_rf"
+  ) |>
+    suppressMessages()
 
   #categorical response and categorical and numeric predictors
-  df_preference <- preference_order(
-    df = vi,
+  x <- preference_order(
+    df = vi_smol,
     response = "vi_categorical",
     predictors = vi_predictors_numeric,
-    f = f_v_rf_categorical,
-    warn_limit = NULL,
+    f = f_categorical_rf,
     quiet = TRUE
   )
 
   testthat::expect_true(
-    is.data.frame(df_preference)
+    is.data.frame(x)
   )
 
   testthat::expect_true(
-    ncol(df_preference) == length(expected_colnames)
-  )
-
-
-  testthat::expect_true(
-    nrow(df_preference) >= 1
+    unique(x$f) == "f_categorical_rf"
   )
 
   testthat::expect_true(
-    nrow(df_preference) == length(vi_predictors_numeric)
+    nrow(x) == length(vi_predictors_numeric)
   )
 
   testthat::expect_true(
-    all(colnames(df_preference) %in% expected_colnames)
+    all(colnames(x) %in% expected_colnames)
   )
 
+  testthat::expect_message(
+    x <- preference_order(
+      df = vi_smol,
+      response = "vi_categorical",
+      predictors = vi_predictors_numeric,
+      f = f_auto,
+      quiet = FALSE
+    ),
+    regexp = "f_categorical_rf"
+  ) |>
+    suppressMessages()
 
+  #custom function
+  f_rsquared <- function(df, ...) {
+    stats::cor(
+      x = df$x,
+      y = df$y,
+      use = "complete.obs"
+    )^2
+  }
+
+  x <- preference_order(
+    df = vi_smol,
+    responses = "vi_numeric",
+    predictors = vi_predictors_numeric[1:10],
+    f = f_rsquared
+  )
+
+  testthat::expect_true(
+    all(x$metric == "custom")
+  )
 })

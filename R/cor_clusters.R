@@ -1,58 +1,104 @@
-#' Hierarchical Clustering from a Pairwise Correlation Matrix
+#' Group predictors by hierarchical correlation clustering
 #'
 #' @description
 #'
-#' Hierarchical clustering of predictors from their pairwise correlation matrix. Computes the correlation matrix with [cor_df()] and [cor_matrix()], transforms it to a dist object, computes a clustering solution with [stats::hclust()], and applies [stats::cutree()] to separate groups based on the value of the argument `max_cor`.
+#' Hierarchical clustering of predictors from their correlation matrix. Computes the correlation matrix with [cor_df()] and [cor_matrix()], transforms it to a distance matrix using \code{stats::dist()}, computes a clustering solution with \code{stats::hclust()}, and applies \code{stats::cutree()} to separate groups based on the value of the argument \code{max_cor}.
 #'
-#' Returns a data frame with predictor names and their clusters, and optionally, prints a dendrogram of the clustering solution.
+#' Returns a dataframe with predictor names and their clusters, and optionally, prints a dendrogram of the clustering solution.
 #'
-#' Accepts a parallelization setup via [future::plan()] and a progress bar via [progressr::handlers()] (see examples).
+#' Accepts a parallelization setup via \code{future::plan()} and a progress bar via \code{progressr::handlers()} (see examples).
 #'
-#' @inheritParams collinear
+#' @inheritParams cor_matrix
+#' @param max_cor (optional; numeric or NULL) Correlation value used to separate clustering groups. Valid values are between 0.01 and 0.99. Default: 0.7
 #' @param method (optional, character string) Argument of [stats::hclust()] defining the agglomerative method. One of: "ward.D", "ward.D2", "single", "complete", "average" (= UPGMA), "mcquitty" (= WPGMA), "median" (= WPGMC) or "centroid" (= UPGMC). Unambiguous abbreviations are accepted as well. Default: "complete".
-#' @param plot (optional, logical) If TRUE, the clustering is plotted. Default: FALSE
 #'
-#' @return data frame: predictor names and their clusters
+#' @return list:
+#' \itemize{
+#'   \item df: dataframe with predictor names and their cluster IDs.
+#'   \item hclust: clustering object
+#' }
+#'
 #' @examples
+#'data(vi_smol)
 #'
-#' #parallelization setup
-#' future::plan(
-#'   future::multisession,
-#'   workers = 2 #set to parallelly::availableCores() - 1
-#' )
+#' ## OPTIONAL: parallelization setup
+#' ## irrelevant when all predictors are numeric
+#' ## only worth it for large data with many categoricals
+#' # future::plan(
+#' #   future::multisession,
+#' #   workers = future::availableCores() - 1
+#' # )
 #'
-#' #progress bar
+#' ## OPTIONAL: progress bar
 #' # progressr::handlers(global = TRUE)
 #'
-#' df_clusters <- cor_clusters(
-#'   df = vi[1:1000, ],
-#'   predictors = vi_predictors[1:15]
+#' #group predictors using max_cor as clustering threshold
+#' clusters <- cor_clusters(
+#'   df = vi_smol,
+#'   predictors = c(
+#'     "koppen_zone", #character
+#'     "soil_type", #factor
+#'     "topo_elevation", #numeric
+#'     "soil_temperature_mean" #numeric
+#'   ),
+#'   max_cor = 0.75
 #' )
 #'
-#' #disable parallelization
-#' future::plan(future::sequential)
+#' #clusters dataframe
+#' clusters$df
 #'
+#' ##plot hclust object
+#' # graphics::plot(clusters$hclust)
+#'
+#' ##plot max_cor threshold
+#' # graphics::abline(
+#' #   h = 1 - 0.75,
+#' #   col = "red4",
+#' #   lty = 3,
+#' #   lwd = 2
+#' # )
+#'
+#' ## OPTIONAL: disable parallelization
+#' #future::plan(future::sequential)
 #' @export
-#' @family pairwise_correlation
+#' @family multicollinearity_assessment
 #' @autoglobal
 cor_clusters <- function(
-    df = NULL,
-    predictors = NULL,
-    max_cor = 0.75,
-    method = "complete",
-    plot = FALSE
-){
+  df = NULL,
+  predictors = NULL,
+  max_cor = 0.7,
+  method = "complete",
+  quiet = FALSE,
+  ...
+) {
+  function_name <- validate_arg_function_name(
+    default_name = "collinear::cor_clusters()",
+    ... = ...
+  )
 
   m <- cor_matrix(
     df = df,
-    predictors = predictors
-  )
+    predictors = predictors,
+    quiet = quiet,
+    function_name = function_name
+  ) |>
+    abs()
 
-  m <- stats::as.dist(1 - abs(m))
+  m <- stats::as.dist(1 - m)
 
-  hc <- stats::hclust(
-    d = m,
-    method = method
+  hc <- tryCatch(
+    stats::hclust(d = m, method = method),
+    error = function(e) {
+      stop(
+        function_name <- validate_arg_function_name(
+          default_name = "stats::hclust()",
+          function_name = function_name
+        ),
+        ": clustering failed: ",
+        e$message,
+        call. = FALSE
+      )
+    }
   )
 
   hc_groups <- stats::cutree(
@@ -65,40 +111,14 @@ cor_clusters <- function(
     cluster = hc_groups
   )
 
-  rownames(df_clusters) <- NULL
-
-  if(plot == TRUE){
-
-    plot(
-      x = hc,
-      labels = df_clusters$predictor,
-      main = paste0("Clustered predictors - max_cor = ", max_cor),
-      xlab = "",
-      ylab = "1 - Cor",
-      sub = "",
-      cex = 0.8,
-      hang = -1
-    )
-
-    graphics::abline(
-      h = 1 - max_cor,
-      col = "gray50",
-      lty = 3,
-      lwd = 2
-      )
-
-    stats::rect.hclust(
-      tree = hc,
-      h = 1 - max_cor,
-      border = "red4"
-    )
-
-  }
-
   df_clusters <- df_clusters[order(df_clusters$cluster), ]
 
   rownames(df_clusters) <- NULL
 
-  df_clusters
+  out <- list(
+    df = df_clusters,
+    hclust = hc
+  )
 
+  out
 }

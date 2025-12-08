@@ -1,124 +1,88 @@
-#' @title Automated Multicollinearity Filtering with Variance Inflation Factors
+#' Multicollinearity filtering by variance inflation factor threshold
 #'
 #' @description
 #'
-#' This function automatizes multicollinearity filtering in data frames with numeric predictors by combining two methods:
-#' \itemize{
-#' \item **Preference Order**: method to rank and preserve relevant variables during  multicollinearity filtering. See argument `preference_order` and function [preference_order()].
-#' \item **VIF-based filtering**: recursive algorithm to identify and remove predictors with a VIF above a given threshold.
-#' }
+#' Wraps [collinear_select()] to automatize multicollinearity filtering via variance inflation factors (VIF) in dataframes with numeric and categorical predictors.
 #'
-#' When the argument `preference_order` is not provided, the predictors are ranked lower to higher VIF. The predictor selection resulting from this option, albeit diverse and uncorrelated, might not be the one with the highest overall predictive power when used in a model.
+#' The argument \code{max_vif} determines the maximum variance inflation factor allowed in the resulting selection of predictors.
 #'
-#' Please check the sections **Preference Order**, **Variance Inflation Factors**, and **VIF-based Filtering** at the end of this help file for further details.
+#' The argument \code{preference_order} accepts a character vector of predictor names ranked from first to last index, or a dataframe resulting from [preference_order()]. When two predictors in this vector or dataframe are highly collinear, the one with a lower ranking is removed. This option helps protect predictors of interest. If not provided, predictors are ranked from lower to higher multicollinearity.
 #'
+#' Please check the sections **Variance Inflation Factors** and **VIF-based Filtering** at the end of this help file for further details.
 #'
-#' @inheritSection collinear Preference Order
 #' @inheritSection collinear Variance Inflation Factors
 #' @inheritSection collinear VIF-based Filtering
 #'
-#' @inheritParams collinear
-#' @inherit collinear return
+#' @inheritParams collinear_select
+#' @return character vector of selected predictors
 #' @examples
-#' #subset to limit example run time
-#' df <- vi[1:1000, ]
-#' predictors <- vi_predictors[1:10]
-#' predictors_numeric <- vi_predictors_numeric[1:10]
+#' data(vi_smol)
 #'
-#' #predictors has mixed types
-#' sapply(
-#'   X = df[, predictors, drop = FALSE],
-#'   FUN = class
+#' ## OPTIONAL: parallelization setup
+#' ## irrelevant when all predictors are numeric
+#' ## only worth it for large data with many categoricals
+#' # future::plan(
+#' #   future::multisession,
+#' #   workers = future::availableCores() - 1
+#' # )
+#'
+#' ## OPTIONAL: progress bar
+#' # progressr::handlers(global = TRUE)
+#'
+#' #predictors
+#' predictors = c(
+#'   "koppen_zone", #character
+#'   "soil_type", #factor
+#'   "topo_elevation", #numeric
+#'   "soil_temperature_mean" #numeric
 #' )
 #'
-#' #categorical predictors are ignored
+#' #predictors ordered from lower to higher multicollinearity
 #' x <- vif_select(
-#'   df = df,
+#'   df = vi_smol,
 #'   predictors = predictors,
-#'   max_vif = 2.5
-#' )
-#'
-#' x
-#'
-#' #all these have a VIF lower than max_vif (2.5)
-#' vif_df(
-#'   df = df,
-#'   predictors = x
-#' )
-#'
-#'
-#' #higher max_vif results in larger selection
-#' x <- vif_select(
-#'   df = df,
-#'   predictors = predictors_numeric,
-#'   max_vif = 10
+#'   max_vif = 5
 #' )
 #'
 #' x
 #'
 #'
-#' #smaller max_vif results in smaller selection
+#' #with custom preference order
 #' x <- vif_select(
-#'   df = df,
-#'   predictors = predictors_numeric,
-#'   max_vif = 2.5
-#' )
-#'
-#' x
-#'
-#'
-#' #custom preference order
-#' x <- vif_select(
-#'   df = df,
-#'   predictors = predictors_numeric,
+#'   df = vi_smol,
+#'   predictors = predictors,
 #'   preference_order = c(
-#'     "swi_mean",
-#'     "soil_temperature_mean",
-#'     "topo_elevation"
+#'     "koppen_zone",
+#'     "soil_type"
 #'   ),
-#'   max_vif = 2.5
+#'   max_vif = 5
 #' )
 #'
 #' x
 #'
-#' #using automated preference order
+#'
+#' #with automated preference order
 #' df_preference <- preference_order(
-#'   df = df,
+#'   df = vi_smol,
 #'   response = "vi_numeric",
-#'   predictors = predictors_numeric
+#'   predictors = predictors
 #' )
 #'
-#' x <- vif_select(
-#'   df = df,
-#'   predictors = predictors_numeric,
+#' df_preference
+#'
+#' x <- cor_select(
+#'   df = vi_smol,
+#'   predictors = predictors,
 #'   preference_order = df_preference,
-#'   max_vif = 2.5
+#'   max_cor = 0.7
 #' )
 #'
 #' x
 #'
-#'
-#' #categorical predictors are ignored
-#' #the function returns NA
-#' x <- vif_select(
-#'   df = df,
-#'   predictors = vi_predictors_categorical
-#' )
-#'
-#' x
-#'
-#'
-#' #if predictors has length 1
-#' #selection is skipped
-#' #and data frame with one row is returned
-#' x <- vif_select(
-#'   df = df,
-#'   predictors = predictors_numeric[1]
-#' )
-#'
-#' x
+#' ## OPTIONAL: disable parallelization
+#' #future::plan(future::sequential)
 #' @autoglobal
-#' @family vif
+#' @family multicollinearity_filtering
 #' @author Blas M. Benito, PhD
 #' @references
 #' \itemize{
@@ -126,184 +90,41 @@
 #' }
 #' @export
 vif_select <- function(
-    df = NULL,
-    predictors = NULL,
-    preference_order = NULL,
-    max_vif = 5,
-    quiet = FALSE
-){
+  df = NULL,
+  response = NULL,
+  predictors = NULL,
+  preference_order = NULL,
+  max_vif = 5,
+  quiet = FALSE,
+  ...
+) {
+  dots <- list(...)
 
-  if(!is.logical(quiet)){
-    message("\ncollinear::vif_select(): argument 'quiet' must be logical, resetting it to FALSE.")
-    quiet <- FALSE
-  }
-
-  #do nothing if
-  #  one predictor only
-  #  max_vif is NULL
-  if(is.null(max_vif)){
-
-    if(quiet == FALSE){
-
-      message("\ncollinear::vif_select(): argument 'max_vif' is NULL, skipping VIF-based filtering.")
-
-    }
-
-    return(predictors)
-  }
-
-  #checking argument max_vif
-  if(
-    !is.numeric(max_vif) ||
-    length(max_vif) != 1 ||
-    max_vif < 2.5 ||
-    max_vif > 10
-  ){
-
-    if(quiet == FALSE){
-
-      message("\ncollinear::vif_select(): invalid 'max_vif', resetting it to 5.")
-
-    }
-
-    max_vif <- 5
-  }
-
-  #validate data
-  predictors <- validate_data_vif(
-    df = df,
-    predictors = predictors,
-    function_name = "collinear::vif_select()",
-    quiet = quiet
+  function_name <- validate_arg_function_name(
+    default_name = "collinear::vif_select()",
+    function_name = dots$function_name
   )
 
-  #if no numerics, return predictors
-  if(length(predictors) <= 1){
-
-    return(predictors)
-
+  if (is.null(max_vif)) {
+    stop(
+      "\n",
+      function_name,
+      ": argument 'max_vif' cannot be NULL.",
+      call. = FALSE
+    )
   }
 
-  #auto preference order
-  preference_order_auto <- vif_df(
+  out <- collinear_select(
     df = df,
-    predictors = predictors,
-    quiet = quiet
-  )
-
-  if(max(preference_order_auto$vif) <= max_vif){
-
-    if(quiet == FALSE){
-
-      message(
-        "\ncollinear::vif_select(): maximum VIF in 'predictors' is <= ",
-        max_vif,
-        ". skipping VIF-based filtering."
-        )
-
-    }
-
-    return(predictors)
-
-  }
-
-  #because vif_df returns higher VIF first
-  preference_order_auto <- rev(preference_order_auto$predictor)
-
-  #validate preference order
-  preference_order <- validate_preference_order(
+    response = response,
     predictors = predictors,
     preference_order = preference_order,
-    preference_order_auto = preference_order_auto,
-    function_name = "collinear::vif_select()"
+    max_cor = NULL,
+    max_vif = max_vif,
+    quiet = quiet,
+    function_name = function_name,
+    m = dots$m
   )
 
-  #fast function to compute max vif
-  if(capabilities("long.double") == TRUE){
-    tolerance = 0
-  } else {
-    tolerance = .Machine$double.eps
-  }
-
-  fast_max_vif <- function(
-    df = NULL,
-    predictors = NULL,
-    tolerance = NULL
-  ){
-
-    stats::cor(
-      x = df[, predictors, drop = FALSE],
-      use = "complete.obs",
-      method = "pearson"
-    ) |>
-      solve(tol = tolerance) |>
-      diag() |>
-      max()
-
-  }
-
-  #vectors with selected and candidates
-  selected <- preference_order[1]
-  candidates <- preference_order[-1]
-
-  #iterate over candidate variables
-  for(candidate in candidates){
-
-    #use fast option first
-    #use slow option if error
-    vif.max <- tryCatch(
-      {
-        #fast option as default
-        fast_max_vif(
-          df = df,
-          predictors = c(
-            selected,
-            candidate
-          ),
-          tolerance = tolerance
-        )
-      },
-      error = function(e) {
-        #slower option on error
-        vif.df <- vif_df(
-          df = df,
-          predictors = c(
-            selected,
-            candidate
-          )
-        )
-        return(max(vif.df$vif))
-      }
-    )
-
-
-    #if candidate keeps vif below the threshold
-    if(vif.max <= max_vif){
-
-      #add candidate to selected
-      selected <- c(
-        selected,
-        candidate
-      )
-
-    }
-
-  }
-
-  if(quiet == FALSE){
-
-    message(
-      "\ncollinear::vif_select(): selected predictors: \n - ",
-      paste(selected, collapse = "\n - ")
-    )
-
-  }
-
-  attr(
-    x = selected,
-    which = "validated"
-  ) <- TRUE
-
-  selected
-
+  out
 }

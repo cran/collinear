@@ -2,95 +2,85 @@
 % Please edit documentation in R/cor_df.R
 \name{cor_df}
 \alias{cor_df}
-\alias{cor_numeric_vs_numeric}
-\alias{cor_numeric_vs_categorical}
-\alias{cor_categorical_vs_categorical}
-\title{Pairwise Correlation Data Frame}
+\title{Compute signed pairwise correlations dataframe}
 \usage{
-cor_df(df = NULL, predictors = NULL, quiet = FALSE)
-
-cor_numeric_vs_numeric(df = NULL, predictors = NULL, quiet = FALSE)
-
-cor_numeric_vs_categorical(df = NULL, predictors = NULL, quiet = FALSE)
-
-cor_categorical_vs_categorical(df = NULL, predictors = NULL, quiet = FALSE)
+cor_df(df = NULL, predictors = NULL, quiet = FALSE, ...)
 }
 \arguments{
-\item{df}{(required; data frame, tibble, or sf) A data frame with responses and predictors. Default: NULL.}
+\item{df}{(required; dataframe, tibble, or sf) A dataframe with responses
+(optional) and predictors. Must have at least 10 rows for pairwise
+correlation analysis, and \code{10 * (length(predictors) - 1)} for VIF.
+Default: NULL.}
 
-\item{predictors}{(optional; character vector) Names of the predictors to select from \code{df}. If omitted, all numeric columns in \code{df} are used instead. If argument \code{response} is not provided, non-numeric variables are ignored. Default: NULL}
+\item{predictors}{(optional; character vector or NULL) Names of the
+predictors in \code{df}. If NULL, all columns except \code{responses} and
+constant/near-zero-variance columns are used. Default: NULL.}
 
-\item{quiet}{(optional; logical) If FALSE, messages generated during the execution of the function are printed to the console Default: FALSE}
+\item{quiet}{(optional; logical) If FALSE, messages are printed. Default: FALSE.}
+
+\item{...}{(optional) Internal args (e.g. \code{function_name} for
+\code{\link{validate_arg_function_name}}, a precomputed correlation matrix
+\code{m}, or cross-validation args for \code{\link{preference_order}}).}
 }
 \value{
-data frame; pairwise correlation
+dataframe with columns:
+\itemize{
+\item \code{x}: character, first predictor name.
+\item \code{y}: character, second predictor name.
+\item \code{correlation}: numeric, Pearson correlation (numeric vs. numeric and numeric vs. categorical) or Cramer's V (categorical vs. categorical).
+}
 }
 \description{
-Computes a pairwise correlation data frame. Implements methods to compare different types of predictors:
+Computes pairwise correlations between predictors using appropriate methods for different variable types:
 \itemize{
-\item \strong{numeric vs. numeric}: as computed with \code{\link[stats:cor]{stats::cor()}} using the methods "pearson" or "spearman", via \code{\link[=cor_numeric_vs_numeric]{cor_numeric_vs_numeric()}}.
-\item \strong{numeric vs. categorical}: the function \code{\link[=cor_numeric_vs_categorical]{cor_numeric_vs_categorical()}} target-encodes the categorical variable using the numeric variable as reference with \code{\link[=target_encoding_lab]{target_encoding_lab()}} and the method "loo" (leave-one-out), and then their correlation is computed with \code{\link[stats:cor]{stats::cor()}}.
-\item \strong{categorical vs. categorical}: the function \code{\link[=cor_categorical_vs_categorical]{cor_categorical_vs_categorical()}} computes Cramer's V (see \code{\link[=cor_cramer_v]{cor_cramer_v()}}) as indicator of the association between character or factor variables. However, take in mind that Cramer's V is not directly comparable with R-squared, even when having the same range from zero to one. It is always recommended to target-encode categorical variables with \code{\link[=target_encoding_lab]{target_encoding_lab()}} before the pairwise correlation analysis.
+\item \strong{Numeric vs. Numeric}: Pearson correlation via \code{stats::cor()}.
+\item \strong{Numeric vs. Categorical}: Target-encodes the categorical variable  using the numeric variable as reference via \code{\link[=target_encoding_lab]{target_encoding_lab()}} with leave-one-out method, then computes Pearson correlation.
+\item \strong{Categorical vs. Categorical}: Cramer's V via \code{\link[=cor_cramer]{cor_cramer()}} as a measure of association. See \code{\link[=cor_cramer]{cor_cramer()}} for important notes on mixing Pearson correlation and Cramer's V in multicollinearity analysis.
 }
 
-Accepts a parallelization setup via \code{\link[future:plan]{future::plan()}} and a progress bar via \code{\link[progressr:handlers]{progressr::handlers()}} (see examples).
+Parallelization via \code{future::plan()} and progress bars via \code{progressr::handlers()} are supported but only beneficial for large datasets with categorical predictors. Numeric-only correlations do not use parallelization or progress bars. Example: With 16 workers, 30k rows (dataframe \link{vi}), 49 numeric and 12 categorical predictors (see \link{vi_predictors}), parallelization achieves a 5.4x speedup (147s → 27s).
 }
 \examples{
-data(
-  vi,
-  vi_predictors
-)
+data(vi_smol)
 
-#reduce size of vi to speed-up example execution
-vi <- vi[1:1000, ]
+## OPTIONAL: parallelization setup
+## irrelevant when all predictors are numeric
+## only worth it for large data with many categoricals
+# future::plan(
+#   future::multisession,
+#   workers = future::availableCores() - 1
+# )
 
-#mixed predictors
-vi_predictors <- vi_predictors[1:10]
-
-#parallelization setup
-future::plan(
-  future::multisession,
-  workers = 2 #set to parallelly::availableCores() - 1
-)
-
-#progress bar
+## OPTIONAL: progress bar
 # progressr::handlers(global = TRUE)
 
-#correlation data frame
-df <- cor_df(
-  df = vi,
-  predictors = vi_predictors
+#predictors
+predictors = c(
+  "koppen_zone", #character
+  "soil_type", #factor
+  "topo_elevation", #numeric
+  "soil_temperature_mean" #numeric
 )
 
-df
+x <- cor_df(
+  df = vi_smol,
+  predictors = predictors
+)
 
-#disable parallelization
-future::plan(future::sequential)
+x
 
+## OPTIONAL: disable parallelization
+#future::plan(future::sequential)
 }
 \seealso{
-Other pairwise_correlation: 
+Other multicollinearity_assessment: 
+\code{\link{collinear_stats}()},
 \code{\link{cor_clusters}()},
-\code{\link{cor_cramer_v}()},
+\code{\link{cor_cramer}()},
 \code{\link{cor_matrix}()},
-\code{\link{cor_select}()}
-
-Other pairwise_correlation: 
-\code{\link{cor_clusters}()},
-\code{\link{cor_cramer_v}()},
-\code{\link{cor_matrix}()},
-\code{\link{cor_select}()}
-
-Other pairwise_correlation: 
-\code{\link{cor_clusters}()},
-\code{\link{cor_cramer_v}()},
-\code{\link{cor_matrix}()},
-\code{\link{cor_select}()}
-
-Other pairwise_correlation: 
-\code{\link{cor_clusters}()},
-\code{\link{cor_cramer_v}()},
-\code{\link{cor_matrix}()},
-\code{\link{cor_select}()}
+\code{\link{cor_stats}()},
+\code{\link{vif}()},
+\code{\link{vif_df}()},
+\code{\link{vif_stats}()}
 }
-\concept{pairwise_correlation}
+\concept{multicollinearity_assessment}

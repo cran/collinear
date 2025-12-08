@@ -3,17 +3,15 @@
 \docType{data}
 \name{toy}
 \alias{toy}
-\title{One response and four predictors with varying levels of multicollinearity}
+\title{Toy dataframe with varying levels of multicollinearity}
 \format{
-Data frame with 2000 rows and 5 columns.
+dataframe with 2000 rows and 5 columns.
 }
 \usage{
 data(toy)
 }
 \description{
-Data frame with known relationship between responses and predictors useful
-to illustrate multicollinearity concepts. Created from \link{vi} using the code
-shown in the example.
+Dataframe with known relationship between responses and predictors useful to illustrate multicollinearity concepts.
 }
 \details{
 Columns:
@@ -37,7 +35,9 @@ Other example_data:
 \code{\link{vi}},
 \code{\link{vi_predictors}},
 \code{\link{vi_predictors_categorical}},
-\code{\link{vi_predictors_numeric}}
+\code{\link{vi_predictors_numeric}},
+\code{\link{vi_responses}},
+\code{\link{vi_smol}}
 }
 \concept{example_data}
 \keyword{datasets}

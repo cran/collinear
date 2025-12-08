@@ -2,63 +2,76 @@
 % Please edit documentation in R/vif_df.R
 \name{vif_df}
 \alias{vif_df}
-\title{Variance Inflation Factor}
+\title{Compute variance inflation factors dataframe}
 \usage{
-vif_df(df = NULL, predictors = NULL, quiet = FALSE)
+vif_df(df = NULL, predictors = NULL, quiet = FALSE, ...)
 }
 \arguments{
-\item{df}{(required; data frame, tibble, or sf) A data frame with responses and predictors. Default: NULL.}
+\item{df}{(required; dataframe, tibble, or sf) A dataframe with responses
+(optional) and predictors. Must have at least 10 rows for pairwise
+correlation analysis, and \code{10 * (length(predictors) - 1)} for VIF.
+Default: NULL.}
 
-\item{predictors}{(optional; character vector) Names of the predictors to select from \code{df}. If omitted, all numeric columns in \code{df} are used instead. If argument \code{response} is not provided, non-numeric variables are ignored. Default: NULL}
+\item{predictors}{(optional; character vector or NULL) Names of the
+predictors in \code{df}. If NULL, all columns except \code{responses} and
+constant/near-zero-variance columns are used. Default: NULL.}
 
-\item{quiet}{(optional; logical) If FALSE, messages generated during the execution of the function are printed to the console Default: FALSE}
+\item{quiet}{(optional; logical) If FALSE, messages are printed. Default: FALSE.}
+
+\item{...}{(optional) Internal args (e.g. \code{function_name} for
+\code{\link{validate_arg_function_name}}, a precomputed correlation matrix
+\code{m}, or cross-validation args for \code{\link{preference_order}}).}
 }
 \value{
-data frame; predictors names their VIFs
+dataframe with columns:
+\itemize{
+\item \code{predictor}: Character, predictor name.
+\item \code{vif}: Numeric, variance inflation factor
+}
 }
 \description{
-Computes the Variance Inflation Factor of numeric variables in a data frame.
-
-This function computes the VIF (see section \strong{Variance Inflation Factors} below) in two steps:
-\itemize{
-\item Applies \code{\link[base:solve]{base::solve()}} to obtain the precision matrix, which is the inverse of the covariance matrix between all variables in \code{predictors}.
-\item Uses \code{\link[base:diag]{base::diag()}} to extract the diagonal of the precision matrix, which contains the variance of the prediction of each predictor from all other predictors, and represents the VIF.
-}
+Computes the pairwise correlation matrix between all pairs of predictors via \code{\link[=cor_df]{cor_df()}} and \code{\link[=cor_matrix]{cor_matrix()}}, applies \code{\link[=vif]{vif()}} to the resulting matrix to compute Variance Inflation Factors, and returns the result as a dataframe.
 }
 \section{Variance Inflation Factors}{
 
 
-The Variance Inflation Factor for a given variable \eqn{a} is computed as \eqn{1/(1-R2)}, where \eqn{R2} is the multiple R-squared of a multiple regression model fitted using \eqn{a} as response and all other predictors in the input data frame as predictors, as in  \eqn{a = b + c + ...}.
-
-The square root of the VIF of \eqn{a} is the factor by which the confidence interval of the estimate for \eqn{a} in the linear model \eqn{y = a + b + c + ...}` is widened by multicollinearity in the model predictors.
-
-The range of VIF values is (1, Inf]. The recommended thresholds for maximum VIF may vary depending on the source consulted, being the most common values, 2.5, 5, and 10.
+VIF for predictor \eqn{a} is computed as \eqn{1/(1-R^2)}, where \eqn{R^2} is
+the multiple R-squared from regressing \eqn{a} on the other predictors.
+Recommended maximums commonly used are 2.5, 5, and 10.
 }
 
 \examples{
 
-data(
-  vi,
-  vi_predictors_numeric
+data(vi_smol)
+
+# ## OPTIONAL: parallelization setup
+# ## irrelevant when all predictors are numeric
+# ## only worth it for large data with many categoricals
+# future::plan(
+#   future::multisession,
+#   workers = future::availableCores() - 1
+# )
+
+# ## OPTIONAL: progress bar
+# progressr::handlers(global = TRUE)
+
+#predictors
+predictors = c(
+  "koppen_zone", #character
+  "soil_type", #factor
+  "topo_elevation", #numeric
+  "soil_temperature_mean" #numeric
 )
 
-#subset to limit run time
-df <- vi[1:1000, ]
-
-#apply pairwise correlation first
-selection <- cor_select(
-  df = df,
-  predictors = vi_predictors_numeric,
-  quiet = TRUE
+x <- vif_df(
+  df = vi_smol,
+  predictors = predictors
 )
 
-#VIF data frame
-df <- vif_df(
-  df = df,
-  predictors = selection
-)
+x
 
-df
+## OPTIONAL: disable parallelization
+#future::plan(future::sequential)
 
 }
 \references{
@@ -67,7 +80,14 @@ df
 }
 }
 \seealso{
-Other vif: 
-\code{\link{vif_select}()}
+Other multicollinearity_assessment: 
+\code{\link{collinear_stats}()},
+\code{\link{cor_clusters}()},
+\code{\link{cor_cramer}()},
+\code{\link{cor_df}()},
+\code{\link{cor_matrix}()},
+\code{\link{cor_stats}()},
+\code{\link{vif}()},
+\code{\link{vif_stats}()}
 }
-\concept{vif}
+\concept{multicollinearity_assessment}

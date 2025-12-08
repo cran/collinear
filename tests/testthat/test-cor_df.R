@@ -1,116 +1,127 @@
 testthat::test_that("`cor_df()` works", {
+  testthat::skip_on_cran()
+  data(vi_smol, vi_predictors, vi_predictors_categorical)
 
-  # mixed types ----
-  predictors <- vi_predictors[1:10]
-  df <- vi[1:1000, ]
-
-  cor.df <- cor_df(
-    df = df,
-    predictors = predictors
-    )
-
-  testthat::expect_true(
-    is.data.frame(cor.df)
+  #mixed types
+  testthat::expect_warning(
+    x <- cor_df(
+      df = vi_smol,
+      predictors = vi_predictors[1:10],
+      quiet = TRUE
+    ),
+    regexp = "may bias the multicollinearity analysis"
   )
 
   testthat::expect_true(
-    all(names(cor.df) %in% c("x", "y", "correlation"))
+    "collinear_cor_df" %in% class(x)
   )
 
   testthat::expect_true(
-    nrow(cor.df) > 0
-  )
-
-  # categorical only ----
-  predictors <- vi_predictors_categorical[1:5]
-
-  cor.df <- cor_df(
-    df = df,
-    predictors = predictors
+    is.data.frame(x)
   )
 
   testthat::expect_true(
-    is.data.frame(cor.df)
+    nrow(x) > 0
   )
 
   testthat::expect_true(
-    all(names(cor.df) %in% c("x", "y", "correlation"))
+    nrow(
+      t(
+        combn(
+          x = vi_predictors[1:10],
+          m = 2
+        )
+      )
+    ) ==
+      nrow(x)
   )
 
   testthat::expect_true(
-    nrow(cor.df) > 0
+    all(names(x) %in% c("x", "y", "correlation", "metric"))
+  )
+
+  testthat::expect_true(
+    all(c("Pearson", "Cramer's V") %in% x$metric)
+  )
+
+  testthat::expect_true(
+    all(x$correlation < 1)
   )
 
   # edge cases ----
 
   #no df
   testthat::expect_error(
-    cor.df <- cor_df(
+    x <- cor_df(
       df = NULL,
       predictors = NULL
-    )
-  )
-
-  #predictors only
-  testthat::expect_error(
-    cor.df <- cor_df(
-      df = NULL,
-      predictors = vi_predictors
-    )
+    ),
+    regexp = "argument 'df' cannot be NULL"
   )
 
   #few rows
   testthat::expect_error(
-    cor.df <- cor_df(
-      df = vi[1, ],
-      predictors = vi_predictors
-    )
+    x <- cor_df(
+      df = vi_smol[1, ],
+      predictors = vi_predictors,
+      quiet = TRUE
+    ),
+    regexp = "argument 'df' has fewer than 3 rows"
   )
 
-
   #no predictors
-  cor.df <- cor_df(
-    df = vi[1:1000, 1:5],
-    predictors = NULL
+  x <- cor_df(
+    df = vi_smol[, 1:5],
+    predictors = NULL,
+    quiet = TRUE
+  )
+
+  testthat::expect_true(
+    "collinear_cor_df" %in% class(x)
   )
 
   testthat::expect_true(
     all(
       unique(
         c(
-          cor.df$x,
-          cor.df$y
+          x$x,
+          x$y
         )
-      ) %in% colnames(vi)[1:5]
+      ) %in%
+        colnames(vi)[1:5]
     )
   )
 
   #single predictor
-  predictors <- vi_predictors[1]
-
   testthat::expect_message(
-    cor.df <- cor_df(
-      df = df,
-      predictors = predictors
-    )
+    x <- cor_df(
+      df = vi_smol,
+      predictors = vi_predictors[1],
+      quiet = FALSE
+    ),
+    regexp = "only one valid predictor, returning one-row dataframe"
   ) |>
     suppressMessages()
 
   testthat::expect_true(
-    is.data.frame(cor.df)
+    "collinear_cor_df" %in% class(x)
   )
 
   testthat::expect_true(
-    all(names(cor.df) %in% c("x", "y", "correlation"))
+    is.data.frame(x)
   )
 
   testthat::expect_true(
-    nrow(cor.df) == 1
+    nrow(x) == 1
   )
 
   testthat::expect_true(
-   cor.df$correlation == 1
+    all(names(x) %in% c("x", "y", "correlation", "metric"))
   )
 
+  testthat::expect_true(x$x == vi_predictors[1])
 
+  testthat::expect_true(x$y == vi_predictors[1])
+
+  testthat::expect_equal(x$correlation, 1, tolerance = 1e-10)
 })

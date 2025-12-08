@@ -2,7 +2,7 @@
 % Please edit documentation in R/model_formula.R
 \name{model_formula}
 \alias{model_formula}
-\title{Generate Model Formulas}
+\title{Build model formulas from response and predictors}
 \usage{
 model_formula(
   df = NULL,
@@ -11,95 +11,123 @@ model_formula(
   term_f = NULL,
   term_args = NULL,
   random_effects = NULL,
-  quiet = FALSE
+  quiet = FALSE,
+  ...
 )
 }
 \arguments{
-\item{df}{(optional; data frame, tibble, or sf). A data frame with responses and predictors. Required if \code{predictors = NULL}. Default: NULL.}
+\item{df}{(required; dataframe, tibble, or sf) A dataframe with responses
+(optional) and predictors. Must have at least 10 rows for pairwise
+correlation analysis, and \code{10 * (length(predictors) - 1)} for VIF.
+Default: NULL.}
 
-\item{response}{(optional; character string or vector) Name/s of response variable/s in \code{df}. Used in target encoding when it names a numeric variable and there are categorical predictors, and to compute preference order. Default: NULL.}
+\item{response}{(optional, character string) Name of a response variable in \code{df}. Default: NULL.}
 
-\item{predictors}{(optional, character vector, output of \code{\link[=collinear]{collinear()}}): predictors to include in the formula. Required if \code{df = NULL}.}
+\item{predictors}{(optional; character vector or NULL) Names of the
+predictors in \code{df}. If NULL, all columns except \code{responses} and
+constant/near-zero-variance columns are used. Default: NULL.}
 
-\item{term_f}{(optional; string). Name of function to apply to each term in the formula, such as "s" for \code{\link[mgcv:s]{mgcv::s()}} or any other smoothing function, "poly" for \code{\link[stats:poly]{stats::poly()}}. Default: NULL}
+\item{term_f}{(optional; string). Name of function to apply to each term in the formula, such as "s" for \code{mgcv::s()} or any other smoothing function, "poly" for \code{stats::poly()}. Default: NULL}
 
 \item{term_args}{(optional; string). Arguments of the function applied to each term. For example, for "poly" it can be "degree = 2, raw = TRUE". Default: NULL}
 
-\item{random_effects}{(optional, string or character vector). Names of variables to be used as random effects. Each element is added to the final formula as \code{ +(1 | random_effect_name)}. Default: NULL}
+\item{random_effects}{(optional, string or character vector). Names of variables to be used as random effects. Each element is added to the final formula as \code{+(1 | random_effect_name)}. Default: NULL}
 
-\item{quiet}{(optional; logical) If FALSE, messages generated during the execution of the function are printed to the console Default: FALSE}
+\item{quiet}{(optional; logical) If FALSE, messages are printed. Default: FALSE.}
+
+\item{...}{(optional) Internal args (e.g. \code{function_name} for
+\code{\link{validate_arg_function_name}}, a precomputed correlation matrix
+\code{m}, or cross-validation args for \code{\link{preference_order}}).}
 }
 \value{
 list if \code{predictors} is a list or length of \code{response} is higher than one, and character vector otherwise.
 }
 \description{
-Generate Model Formulas
+Generates model formulas from a dataframe, a response name, and a vector of predictors that can be the output of a multicollinearity management function such as \code{\link[=collinear_select]{collinear_select()}} and the likes. Intended to help fit exploratory models from the result of a multicollinearity analysis.
+
+The types of formulas it can generate are:
+\itemize{
+\item additive: \code{y ~ x + z}
+\item polynomial: \code{y ~ poly(x, ...) + poly(z, ...)}
+\item GAM: \code{y ~ s(x) + s(z)}
+\item random effect: \code{y ~ x + (1 \ z)}
+}
 }
 \examples{
-#using df, response, and predictors
-#----------------------------------
-df <- vi[1:1000, ]
+data(
+  vi_smol,
+  vi_predictors_numeric
+  )
 
-#additive formulas
-formulas_additive <- model_formula(
-  df = df,
-  response = c(
-    "vi_numeric",
-    "vi_categorical"
-    ),
-  predictors = vi_predictors_numeric[1:10]
+#reduce collinearity
+x <- collinear_select(
+  df = vi_smol,
+  predictors = vi_predictors_numeric
 )
 
-formulas_additive
+#additive formula
+y <- model_formula(
+  df = vi_smol,
+  response = "vi_numeric",
+  predictors = x
+)
+
+y
 
 #using a formula in a model
-#m <- stats::lm(
-#  formula = formulas_additive[[1]],
-#  data = df
-#  )
+m <- stats::lm(
+ formula = y,
+ data = vi_smol
+ )
 
-# using output of collinear()
-#----------------------------------
-selection <- collinear(
-  df = df,
-  response = c(
-    "vi_numeric",
-    "vi_binomial"
-  ),
-  predictors = vi_predictors_numeric[1:10],
-  quiet = TRUE
+summary(m)
+
+#classification formula (character response)
+y <- model_formula(
+  df = vi_smol,
+  response = "vi_categorical",
+  predictors = x
 )
 
-#polynomial formulas
-formulas_poly <- model_formula(
-  predictors = selection,
+y
+
+
+#polynomial formula (3rd degree)
+y <- model_formula(
+  df = vi_smol,
+  response = "vi_numeric",
+  predictors = x,
   term_f = "poly",
   term_args = "degree = 3, raw = TRUE"
 )
 
-formulas_poly
+y
 
-#gam formulas
-formulas_gam <- model_formula(
-  predictors = selection,
+#gam formula
+y <- model_formula(
+  df = vi_smol,
+  response = "vi_numeric",
+  predictors = x,
   term_f = "s"
 )
 
-formulas_gam
+y
 
-#adding a random effect
-formulas_random_effect <- model_formula(
-  predictors = selection,
-  random_effects = "country_name"
+#random effect
+y <- model_formula(
+  df = vi_smol,
+  response = "vi_numeric",
+  predictors = x,
+  random_effects = "country_name" #from vi_smol$country_name
 )
 
-formulas_random_effect
+y
 }
 \seealso{
 Other modelling_tools: 
 \code{\link{case_weights}()},
-\code{\link{performance_score_auc}()},
-\code{\link{performance_score_r2}()},
-\code{\link{performance_score_v}()}
+\code{\link{score_auc}()},
+\code{\link{score_cramer}()},
+\code{\link{score_r2}()}
 }
 \concept{modelling_tools}

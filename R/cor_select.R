@@ -1,219 +1,124 @@
-#' @title Automated Multicollinearity Filtering with Pairwise Correlations
+#' @title Multicollinearity filtering by pairwise correlation threshold
 #'
 #' @description
 #'
-#' Implements a recursive forward selection algorithm to keep predictors with a maximum pairwise correlation with all other selected predictors lower than a given threshold. Uses [cor_df()] underneath, and as such, can handle different combinations of predictor types.
+#' Wraps [collinear_select()] to automatize multicollinearity filtering via pairwise correlation in dataframes with numeric and categorical predictors.
+#'
+#' The argument \code{max_cor} determines the maximum variance inflation factor allowed in the resulting selection of predictors.
+#'
+#' The argument \code{preference_order} accepts a character vector of predictor names ranked from first to last index, or a dataframe resulting from [preference_order()]. When two predictors in this vector or dataframe are highly collinear, the one with a lower ranking is removed. This option helps protect predictors of interest. If not provided, predictors are ranked from lower to higher multicollinearity.
 #'
 #' Please check the section **Pairwise Correlation Filtering** at the end of this help file for further details.
 #'
 #' @inheritSection collinear Pairwise Correlation Filtering
 #'
-#' @inheritParams collinear
-#' @inherit collinear return
+#' @inheritParams collinear_select
+#' @return character vector of selected predictors
 #' @examples
-#' #subset to limit example run time
-#' df <- vi[1:1000, ]
+#' data(vi_smol)
 #'
-#' #only numeric predictors only to speed-up examples
-#' #categorical predictors are supported, but result in a slower analysis
-#' predictors <- vi_predictors_numeric[1:8]
+#' ## OPTIONAL: parallelization setup
+#' ## irrelevant when all predictors are numeric
+#' ## only worth it for large data with many categoricals
+#' # future::plan(
+#' #   future::multisession,
+#' #   workers = future::availableCores() - 1
+#' # )
 #'
-#' #predictors has mixed types
-#' sapply(
-#'   X = df[, predictors, drop = FALSE],
-#'   FUN = class
-#' )
-#'
-#' #parallelization setup
-#' future::plan(
-#'   future::multisession,
-#'   workers = 2 #set to parallelly::availableCores() - 1
-#' )
-#'
-#' #progress bar
+#' ## OPTIONAL: progress bar
 #' # progressr::handlers(global = TRUE)
 #'
-#' #without preference order
-#' x <- cor_select(
-#'   df = df,
-#'   predictors = predictors,
-#'   max_cor = 0.75
+#' #predictors
+#' predictors = c(
+#'   "koppen_zone", #character
+#'   "soil_type", #factor
+#'   "topo_elevation", #numeric
+#'   "soil_temperature_mean" #numeric
 #' )
+#'
+#' #predictors ordered from lower to higher multicollinearity
+#' x <- cor_select(
+#'   df = vi_smol,
+#'   predictors = predictors,
+#'   max_cor = 0.7
+#' )
+#'
+#' x
 #'
 #'
 #' #with custom preference order
 #' x <- cor_select(
-#'   df = df,
+#'   df = vi_smol,
 #'   predictors = predictors,
 #'   preference_order = c(
-#'     "swi_mean",
+#'     "koppen_zone",
 #'     "soil_type"
 #'   ),
-#'   max_cor = 0.75
+#'   max_cor = 0.7
 #' )
 #'
+#' x
 #'
 #' #with automated preference order
 #' df_preference <- preference_order(
-#'   df = df,
+#'   df = vi_smol,
 #'   response = "vi_numeric",
 #'   predictors = predictors
 #' )
 #'
+#' df_preference
+#'
 #' x <- cor_select(
-#'   df = df,
+#'   df = vi_smol,
 #'   predictors = predictors,
 #'   preference_order = df_preference,
-#'   max_cor = 0.75
+#'   max_cor = 0.7
 #' )
 #'
-#' #resetting to sequential processing
-#' future::plan(future::sequential)
+#' x
+#'
+#' #OPTIONAL: disable parallelization
+#' #future::plan(future::sequential)
 #' @autoglobal
-#' @family pairwise_correlation
+#' @family multicollinearity_filtering
 #' @author Blas M. Benito, PhD
 #' @export
 cor_select <- function(
-    df = NULL,
-    predictors = NULL,
-    preference_order = NULL,
-    max_cor = 0.75,
-    quiet = FALSE
-){
+  df = NULL,
+  response = NULL,
+  predictors = NULL,
+  preference_order = NULL,
+  max_cor = 0.7,
+  quiet = FALSE,
+  ...
+) {
+  dots <- list(...)
 
-  if(!is.logical(quiet)){
-    message("\ncollinear::cor_select(): argument 'quiet' must be logical, resetting it to FALSE.")
-    quiet <- FALSE
-  }
-
-  #do nothing if one predictor only
-  if(is.null(max_cor)){
-
-    if(quiet == FALSE){
-
-      message("\ncollinear::cor_select(): argument 'max_cor' is NULL, skipping pairwise correlation filtering.")
-
-    }
-
-    return(predictors)
-
-  }
-
-  #checking argument max_cor
-  if(
-    !is.numeric(max_cor) ||
-    length(max_cor) != 1 ||
-    max_cor < 0.1 ||
-    max_cor > 1
-    ){
-
-    if(quiet == FALSE){
-
-      message("\ncollinear::cor_select(): invalid 'max_cor', resetting it to 0.75.")
-
-    }
-
-    max_cor <- 0.75
-  }
-
-  #validate input data
-  predictors <- validate_data_cor(
-    df = df,
-    predictors = predictors,
-    function_name = "collinear::cor_select()",
-    quiet = quiet
+  function_name <- validate_arg_function_name(
+    default_name = "collinear::cor_select()",
+    function_name = dots$function_name
   )
 
-  if(length(predictors) <= 1){
-    return(predictors)
+  if (is.null(max_cor)) {
+    stop(
+      "\n",
+      function_name,
+      ": argument 'max_cor' cannot be NULL.",
+      call. = FALSE
+    )
   }
 
-  #correlation matrix
-  if(quiet == FALSE){
-
-    message("\ncollinear::cor_select(): computing pairwise correlation matrix.")
-
-  }
-
-  m <- cor_matrix(
+  out <- collinear_select(
     df = df,
-    predictors = predictors
-  ) |>
-    abs()
-
-  #test to skip computation if needed
-  if(max(m[upper.tri(x = m)]) <= max_cor){
-
-    if(quiet == FALSE){
-
-      message("\ncollinear::cor_select(): maximum pairwise correlation is <= ", max_cor, ", skipping pairwise correlation filtering.")
-
-    }
-
-    return(predictors)
-
-  }
-
-
-  #auto preference order
-  #variables with lower sum of correlation with others go higher
-  preference_order_auto <- m |>
-    colSums() |>
-    sort() |>
-    names()
-
-  #validate preference order
-  preference_order <- validate_preference_order(
+    response = response,
     predictors = predictors,
     preference_order = preference_order,
-    preference_order_auto = preference_order_auto,
-    function_name = "collinear::cor_select()",
-    quiet = quiet
+    max_cor = max_cor,
+    max_vif = NULL,
+    quiet = quiet,
+    function_name = function_name,
+    m = dots$m
   )
 
-  #organize the correlation matrix according to preference_order
-  m <- m[
-    preference_order,
-    preference_order
-  ]
-
-  #set diag to 0
-  diag(m) <- 0
-
-  #vectors with selected and candidates
-  selected <- preference_order[1]
-  candidates <- preference_order[-1]
-
-  #iterate over candidate variables
-  for(candidate in candidates){
-
-    #if candidate keeps correlation below the threshold
-    if(max(m[selected, candidate]) <= max_cor){
-
-      #add candidate to selected
-      selected <- c(
-        selected,
-        candidate
-        )
-
-    }
-
-  }
-
-  if(quiet == FALSE){
-
-    message(
-      "\ncollinear::cor_select(): selected predictors: \n - ",
-      paste(selected, collapse = "\n - ")
-    )
-
-  }
-
-  attr(
-    x = selected,
-    which = "validated"
-  ) <- TRUE
-
-  selected
-
+  out
 }

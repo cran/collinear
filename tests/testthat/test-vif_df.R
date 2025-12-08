@@ -1,132 +1,75 @@
 testthat::test_that("`vif_df()` works", {
+  testthat::skip_on_cran()
 
-  # numeric types ----
-  predictors <- vi_predictors_numeric[1:10]
-  df <- vi[1:1000, ]
-
-  vif.df <- vif_df(
-    df = df,
-    predictors = predictors
-  )
-
-  testthat::expect_true(
-    is.data.frame(vif.df)
-  )
-
-  testthat::expect_true(
-    all(names(vif.df) %in% c("predictor", "vif"))
-  )
-
-  testthat::expect_true(
-    nrow(vif.df) == length(predictors)
-  )
-
-  # mixed types ----
-  predictors <- vi_predictors[1:10]
-  df <- vi[1:1000, ]
+  data(vi_smol, vi_predictors)
 
   testthat::expect_message(
-    vif.df <- vif_df(
-      df = df,
-      predictors = predictors
-    )
+    x <- vif_df(
+      df = vi_smol,
+      predictors = vi_predictors[1:10]
+    ),
+    regexp = "converted the following character columns to factor"
   ) |>
     suppressMessages()
 
-  testthat::expect_true(
-    is.data.frame(vif.df)
-  )
-
-  testthat::expect_true(
-    all(names(vif.df) %in% c("predictor", "vif"))
-  )
-
-  testthat::expect_true(
-    length(vif.df$predictor) < length(predictors)
-  )
-
-  # categorical only ----
-  predictors <- vi_predictors_categorical[1:5]
-
   testthat::expect_message(
-    vif.df <- vif_df(
-      df = df,
-      predictors = predictors
-    )
+    x <- vif_df(
+      df = vi_smol,
+      predictors = vi_predictors[1:10]
+    ),
+    regexp = "may bias the multicollinearity analysis"
   ) |>
     suppressMessages()
 
-  testthat::expect_true(
-    is.data.frame(vif.df)
+  testthat::expect_warning(
+    x <- vif_df(
+      df = vi_smol,
+      predictors = vi_predictors[1:10],
+      quiet = TRUE
+    ),
+    regexp = "may bias the multicollinearity analysis"
   )
 
   testthat::expect_true(
-    all(is.na(vif.df[1, ]))
+    is.data.frame(x)
+  )
+
+  testthat::expect_true(
+    all(names(x) %in% c("predictor", "vif"))
+  )
+
+  testthat::expect_true(
+    nrow(x) == length(vi_predictors[1:10])
   )
 
   # edge cases ----
 
-  #no df
+  #no arguments
   testthat::expect_error(
-    vif.df <- vif_df(
+    x <- vif_df(
       df = NULL,
       predictors = NULL
-    )
-  )
-
-  #predictors only
-  testthat::expect_error(
-    vif.df <- vif_df(
-      df = NULL,
-      predictors = vi_predictors
-    )
-  )
-
-  #few rows
-  testthat::expect_error(
-    vif.df <- vif_df(
-      df = vi[1, ],
-      predictors = vi_predictors
-    )
-  )
-
-
-  #no predictors
-  predictors <- vi_predictors_numeric[1:5]
-
-  vif.df <- vif_df(
-    df = df[, predictors, drop = FALSE],
-    predictors = NULL
-  )
-
-  testthat::expect_true(
-    all(
-      vif.df$predictor %in% colnames(df)
-    )
+    ),
+    regexp = "argument 'df' cannot be NULL"
   )
 
   #single predictor
-  predictors <- vi_predictors_numeric[1]
-
   testthat::expect_message(
-    vif.df <- vif_df(
-      df = df,
-      predictors = predictors
-    )
+    x <- vif_df(
+      df = vi_smol,
+      predictors = vi_predictors[1]
+    ),
+    regexp = "only one valid predictor"
   ) |>
     suppressMessages()
 
-
   testthat::expect_true(
-    is.data.frame(vif.df)
+    is.data.frame(x)
   )
 
   testthat::expect_true(
-    nrow(vif.df) == 1
+    nrow(x) == 1
   )
 
-  testthat::expect_true(
-    vif.df$vif == 0
-  )
-
+  testthat::expect_equal(x$vif, 0, tolerance = 1e-10)
 })

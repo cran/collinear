@@ -2,160 +2,210 @@
 % Please edit documentation in R/preference_order.R
 \name{preference_order}
 \alias{preference_order}
-\title{Quantitative Variable Prioritization for Multicollinearity Filtering}
+\title{Rank predictors by importance or multicollinearity}
 \usage{
 preference_order(
   df = NULL,
-  response = NULL,
+  responses = NULL,
   predictors = NULL,
-  f = "auto",
-  warn_limit = NULL,
-  quiet = FALSE
+  f = f_auto,
+  cv_training_fraction = 1,
+  cv_iterations = 1,
+  seed = 1,
+  quiet = FALSE,
+  ...
 )
 }
 \arguments{
-\item{df}{(required; data frame, tibble, or sf) A data frame with responses and predictors. Default: NULL.}
+\item{df}{(required; dataframe, tibble, or sf) A dataframe with responses
+(optional) and predictors. Must have at least 10 rows for pairwise
+correlation analysis, and \code{10 * (length(predictors) - 1)} for VIF.
+Default: NULL.}
 
-\item{response}{(optional; character string or vector) Name/s of response variable/s in \code{df}. Used in target encoding when it names a numeric variable and there are categorical predictors, and to compute preference order. Default: NULL.}
+\item{responses}{(optional; character, character vector, or NULL) Name of
+one or several response variables in \code{df}. Default: NULL.}
 
-\item{predictors}{(optional; character vector) Names of the predictors to select from \code{df}. If omitted, all numeric columns in \code{df} are used instead. If argument \code{response} is not provided, non-numeric variables are ignored. Default: NULL}
+\item{predictors}{(optional; character vector or NULL) Names of the
+predictors in \code{df}. If NULL, all columns except \code{responses} and
+constant/near-zero-variance columns are used. Default: NULL.}
 
-\item{f}{(optional: function) Function to compute preference order. If "auto" (default) or NULL, the output of \code{\link[=f_auto]{f_auto()}} for the given data is used:
-\itemize{
-\item \code{\link[=f_auc_rf]{f_auc_rf()}}: if \code{response} is binomial.
-\item \code{\link[=f_r2_pearson]{f_r2_pearson()}}: if \code{response} and \code{predictors} are numeric.
-\item \code{\link[=f_v]{f_v()}}: if \code{response} and \code{predictors} are categorical.
-\item \code{\link[=f_v_rf_categorical]{f_v_rf_categorical()}}: if \code{response} is categorical and \code{predictors} are numeric or mixed .
-\item \code{\link[=f_r2_rf]{f_r2_rf()}}: in all other cases.
-}
-Default: NULL}
+\item{f}{(optional: function name) Unquoted function name without parenthesis (see \link{f_functions}). By default calls to \code{\link[=f_auto]{f_auto()}}, which selects a suitable function depending on the nature of the response and predictors. Set to NULL if \code{responses = NULL}. If NULL, predictors are ranked from lower to higher multicollinearity. Default: \code{f_auto}}
 
-\item{warn_limit}{(optional, numeric) Preference value (R-squared, AUC, or Cramer's V) over which a warning flagging suspicious predictors is issued. Disabled if NULL. Default: NULL}
+\item{cv_training_fraction}{(optional, numeric) Value between 0.1 and 1 defining the training faction used in cross-validation. If 1 (default), no cross-validation is performed, and the resulting metric is computed from all observations and predictions. Automatically set to 1 when \code{cv_iterations = 1}. Default: 1}
 
-\item{quiet}{(optional; logical) If FALSE, messages generated during the execution of the function are printed to the console Default: FALSE}
+\item{cv_iterations}{(optional, integer) Number of cross-validation iterations to perform. The recommended range lies between 30 and 100. In general, smaller datasets and large values of \code{cv_training_fraction} require more iterations to achieve stability. Automatically set to 1 when \code{cv_training_fraction = 1}. Default: 1}
+
+\item{seed}{(optional, integer) Random seed, required for reproducibility when using cross-validation or random forest models. Default: 1}
+
+\item{quiet}{(optional; logical) If FALSE, messages are printed. Default: FALSE.}
+
+\item{...}{(optional) Internal args (e.g. \code{function_name} for
+\code{\link{validate_arg_function_name}}, a precomputed correlation matrix
+\code{m}, or cross-validation args for \code{\link{preference_order}}).}
 }
 \value{
-data frame: columns are "response", "predictor", "f" (function name), and "preference".
+dataframe:
+\itemize{
+\item \code{response}: character, response name, if any, or \code{"none"} otherwise.
+
+\item \code{predictor}: character, name of the predictor.
+
+\item \code{f}: name of the function used to compute the preference order. If argument \code{f} is NULL, the value "stats::cor()" is added to this column.
+
+\item \code{metric}: name of the metric used to assess strength of association. Usually one of "R-squared", "AUC" (Area Under the ROC Curve), or "Cramer's V". If \code{f} is a custom function not in \code{\link[=f_functions]{f_functions()}}, then \code{metric} is set to "custom". If \code{f} is NULL, then "1 - R-squared" is returned in this column.
+
+\item \code{score}: value of the metric returned by \code{f} to assess the association between the \code{response} and each given \code{predictor}.
+
+\item \code{rank}: integer value indicating the rank of the predictor.
+}
 }
 \description{
-Ranks a set of predictors by the strength of their association with a response. Aims to minimize the loss of important predictors during multicollinearity filtering.
+Generates a valid input for the argument \code{preference_order} of the functions \code{\link[=vif_select]{vif_select()}}, \code{\link[=cor_select]{cor_select()}}, \code{\link[=collinear_select]{collinear_select()}}, and \code{\link[=collinear]{collinear()}}. This argument helps preserve important predictors during multicollinearity filtering.
 
-The strength of association between the response and each predictor is computed by the function \code{f}. The \code{f} functions available are:
+The function works in two different ways:
 \itemize{
-\item \strong{Numeric response vs numeric predictor}:
-\itemize{
-\item \code{\link[=f_r2_pearson]{f_r2_pearson()}}: Pearson's R-squared.
-\item \code{\link[=f_r2_spearman]{f_r2_spearman()}}: Spearman's R-squared.
-\item \code{\link[=f_r2_glm_gaussian]{f_r2_glm_gaussian()}}: Pearson's R-squared of response versus the predictions of a Gaussian GLM.
-\item \code{\link[=f_r2_glm_gaussian_poly2]{f_r2_glm_gaussian_poly2()}}: Gaussian GLM with second degree polynomial.
-\item \code{\link[=f_r2_gam_gaussian]{f_r2_gam_gaussian()}}: GAM model fitted with \code{\link[mgcv:gam]{mgcv::gam()}}.
-\item \code{\link[=f_r2_rpart]{f_r2_rpart()}}: Recursive Partition Tree fitted with \code{\link[rpart:rpart]{rpart::rpart()}}.
-\item \code{\link[=f_r2_rf]{f_r2_rf()}}: Random Forest model fitted with \code{\link[ranger:ranger]{ranger::ranger()}}.
-}
-\item \strong{Integer counts response vs. numeric predictor}:
-\itemize{
-\item \code{\link[=f_r2_glm_poisson]{f_r2_glm_poisson()}}: Pearson's R-squared of a Poisson GLM.
-\item \code{\link[=f_r2_glm_poisson_poly2]{f_r2_glm_poisson_poly2()}}: Poisson GLM with second degree polynomial.
-\item \code{\link[=f_r2_gam_poisson]{f_r2_gam_poisson()}}: Poisson GAM.
-}
-\item \strong{Binomial response (1 and 0) vs. numeric predictor}:
-\itemize{
-\item \code{\link[=f_auc_glm_binomial]{f_auc_glm_binomial()}}: AUC of quasibinomial GLM with weighted cases.
-\item \code{\link[=f_auc_glm_binomial_poly2]{f_auc_glm_binomial_poly2()}}: As above with second degree polynomial.
-\item \code{\link[=f_auc_gam_binomial]{f_auc_gam_binomial()}}: Quasibinomial GAM with weighted cases.
-\item \code{\link[=f_auc_rpart]{f_auc_rpart()}}: Recursive Partition Tree with weighted cases.
-\item \code{\link[=f_auc_rf]{f_auc_rf()}}: Random Forest model with weighted cases.
-}
-\item \strong{Categorical response (character of factor) vs. categorical predictor}:
-\itemize{
-\item \code{\link[=f_v]{f_v()}}: Cramer's V between two categorical variables.
-}
-\item \strong{Categorical response vs. categorical or numerical predictor}:
-\itemize{
-\item \code{\link[=f_v_rf_categorical]{f_v_rf_categorical()}}: Cramer's V of a Random Forest model.
-}
+\item When \code{f} is NULL, it ranks the predictors from lower to higher multicollinearity, computed as one minus the average Pearson correlation between the given predictor against all others. This option is useful when the goal is to limit redundancy in a large dataset and there is not an specific model to train in mind.
+\item When \code{responses} and \code{f} are not NULL, it ranks the predictors by the strength of their association with a response based on the evaluation of univariate models. This is the best possible option when the end-goal is training a model.
 }
 
-The name of the used function is stored in the attribute "f_name" of the output data frame. It can be retrieved via \code{attributes(df)$f_name}
+The argument \code{f} (requires a valid \code{resopnses} argument) defines how the strength of association between the response and each predictor is computed. By default it calls \code{\link[=f_auto]{f_auto()}}, which uses \code{\link[=f_auto_rules]{f_auto_rules()}} to select a suitable function depending on the types of the response and the predictors. This option is designed to provide sensible, general-purpose defaults optimized for speed and stability rather than any specific modeling approach.
 
-Additionally, any custom function accepting a data frame with the columns "x" (predictor) and "y" (response) and returning a numeric indicator of association where higher numbers indicate higher association will work.
+For more fine-tuned control, the package offers the following \code{f} functions (see \code{\link[=f_functions]{f_functions()}}):
 
-This function returns a data frame with the column "predictor", with predictor names ordered by the column "preference", with the result of \code{f}. This data frame, or the column "predictor" alone, can be used as inputs for the argument \code{preference_order} in \code{\link[=collinear]{collinear()}}, \code{\link[=cor_select]{cor_select()}}, and \code{\link[=vif_select]{vif_select()}}.
+\itemize{
+\item \strong{Numeric response}:
+\itemize{
+\item \code{\link[=f_numeric_glm]{f_numeric_glm()}}: Pearson's R-squared of response versus the predictions of a Gaussian GLM.
+\item \code{\link[=f_numeric_gam]{f_numeric_gam()}}: GAM model fitted with \code{mgcv::gam()}.
+\item \code{\link[=f_numeric_rf]{f_numeric_rf()}}: Random Forest model fitted with \code{ranger::ranger()}.
+}
+\item \strong{Integer counts response}:
+\itemize{
+\item \code{\link[=f_count_glm]{f_count_glm()}}: Pearson's R-squared of a Poisson GLM.
+\item \code{\link[=f_count_gam]{f_count_gam()}}: Poisson GAM.
+\item \code{\link[=f_count_rf]{f_count_rf()}}: Random Forest model fitted with \code{ranger::ranger()}.
+}
+\item \strong{Binomial response (1 and 0)}:
+\itemize{
+\item \code{\link[=f_binomial_glm]{f_binomial_glm()}}: AUC of Quasibinomial GLM with weighted cases.
+\item \code{\link[=f_binomial_gam]{f_binomial_gam()}}: AUC of Quasibinomial GAM with weighted cases.
+\item \code{\link[=f_binomial_rf]{f_binomial_rf()}}: AUC of a Random Forest model with weighted cases.
+}
+\item \strong{Categorical response}:
+\itemize{
+\item \code{\link[=f_categorical_rf]{f_categorical_rf()}}: Cramer's V of the response against the predictions of a classification Random Forest model.
+}
+}
 
-Accepts a parallelization setup via \code{\link[future:plan]{future::plan()}} and a progress bar via \code{\link[progressr:handlers]{progressr::handlers()}} (see examples).
+These functions accept a cross-validation setup via the arguments \code{cv_iterations} and \code{cv_training_fraction}.
 
-Accepts a character vector of response variables as input for the argument \code{response}. When more than one response is provided, the output is a named list of preference data frames.
+Additionally, the argument \code{f} accepts any custom function taking a dataframe with the columns "x" (predictor) and "y" (response) and returning a numeric indicator of association.
+
+Accepts a parallelization setup via \code{future::plan()} and a progress bar via \code{progressr::handlers()} (see examples).
+
+Accepts a character vector of response variables as input for the argument \code{responses}. When more than one response is provided, the output is a named list of preference data frames.
 }
 \examples{
-#subsets to limit example run time
-df <- vi[1:1000, ]
-predictors <- vi_predictors[1:10]
-predictors_numeric <- vi_predictors_numeric[1:10]
-
-#parallelization setup
-future::plan(
-  future::multisession,
-  workers = 2 #set to parallelly::availableCores() - 1
+#load example data
+data(
+  vi_smol,
+  vi_predictors_numeric
 )
 
-#progress bar
+##OPTIONAL: parallelization setup
+# future::plan(
+#   future::multisession,
+#   workers = future::availableCores() - 1
+# )
+
+##OPTIONAL: progress bar
+##does not work in R examples
 # progressr::handlers(global = TRUE)
 
-#numeric response and predictors
+#ranking predictors from lower to higher multicollinearity
 #------------------------------------------------
-#selects f automatically depending on data features
-#applies f_r2_pearson() to compute correlation between response and predictors
-df_preference <- preference_order(
-  df = df,
-  response = "vi_numeric",
-  predictors = predictors_numeric,
-  f = NULL
+x <- preference_order(
+  df = vi_smol,
+  responses = NULL, #default value
+  predictors = vi_predictors_numeric[1:10],
+  f = NULL #must be explicit
+)
+
+x
+
+#automatic selection of ranking function
+#------------------------------------------------
+x <- preference_order(
+  df = vi_smol,
+  responses = c("vi_numeric", "vi_categorical"),
+  predictors = vi_predictors_numeric[1:10],
+  f = f_auto
   )
 
-#returns data frame ordered by preference
-df_preference
+x
 
-
-#several responses
+#user selection of ranking function
 #------------------------------------------------
-responses <- c(
-  "vi_categorical",
-  "vi_counts"
+#Poisson GLM for a integer counts response
+x <- preference_order(
+  df = vi_smol,
+  responses = "vi_binomial",
+  predictors = vi_predictors_numeric[1:10],
+  f = f_binomial_glm
 )
 
-preference_list <- preference_order(
-  df = df,
-  response = responses,
-  predictors = predictors
+x
+
+#cross-validation
+#------------------------------------------------
+x <- preference_order(
+  df = vi_smol,
+  responses = "vi_binomial",
+  predictors = vi_predictors_numeric[1:10],
+  f = f_binomial_glm,
+  cv_training_fraction = 0.5,
+  cv_iterations = 10
 )
 
-#returns a named list
-names(preference_list)
-preference_list[[1]]
-preference_list[[2]]
+x
 
-#can be used in collinear()
-# x <- collinear(
-#   df = df,
-#   response = responses,
-#   predictors = predictors,
-#   preference_order = preference_list
-# )
+#custom pairwise correlation function
+#------------------------------------------------
+#custom functions need the ellipsis argument
+f_rsquared <- function(df, ...){
+    stats::cor(
+      x = df$x,
+      y = df$y,
+      use = "complete.obs"
+    )^2
+}
 
-#f function selected by user
-#for binomial response and numeric predictors
-# preference_order(
-#   df = vi,
-#   response = "vi_binomial",
-#   predictors = predictors_numeric,
-#   f = f_auc_glm_binomial
-# )
+x <- preference_order(
+  df = vi_smol,
+  responses = "vi_numeric",
+  predictors = vi_predictors_numeric[1:10],
+  f = f_rsquared
+)
 
+x
 
-#disable parallelization
-future::plan(future::sequential)
+#resetting to sequential processing
+#future::plan(future::sequential)
+}
+\seealso{
+Other preference_order_functions: 
+\code{\link{f_binomial_gam}()},
+\code{\link{f_binomial_glm}()},
+\code{\link{f_binomial_rf}()},
+\code{\link{f_categorical_rf}()},
+\code{\link{f_count_gam}()},
+\code{\link{f_count_glm}()},
+\code{\link{f_count_rf}()},
+\code{\link{f_numeric_gam}()},
+\code{\link{f_numeric_glm}()},
+\code{\link{f_numeric_rf}()}
 }
 \author{
 Blas M. Benito, PhD
 }
-\concept{preference_order}
+\concept{preference_order_functions}

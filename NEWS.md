@@ -1,3 +1,23 @@
+# collinear 3.0.1
+
+## Bug Fixes
+
+- **`preference_order()`**: Namespace-qualified function names (e.g., `collinear::f_count_gam`) are now correctly recognised as package functions instead of being labelled `metric = "custom"`. Fixed by stripping the namespace prefix before name lookup in `R/preference_order.R`.
+
+- **`preference_order()`**: `NA` values in the response variable (including those converted from `Inf`/`-Inf`/`NaN`) are now handled correctly. Fixed by wrapping the `(y, x)` data frame construction in `stats::na.omit()` in `R/preference_order.R`.
+
+- **`model_formula()`**: No longer crashes on `sf` spatial data frames with `"default method not implemented for type 'list'"`. Fixed by calling `drop_geometry_column()` early in `R/model_formula.R` before variable-type detection.
+
+- **`score_auc()` (#19)**: No longer crashes when `o` or `p` contain `NA`. Fixed by removing incomplete cases before computing `ones`/`zeros` in `R/score_auc.R`.
+
+## Data Changes
+
+- Example datasets (`vi`, `vi_smol`, `vi_predictors`, `vi_predictors_numeric`, `vi_predictors_categorical`, `vi_responses`) have been moved to the package [`spatialData`](https://cran.r-project.org/package=spatialData). All function examples and README code now load data via `data(..., package = "spatialData")`.
+
+## Other Changes
+
+- The package now prints its version on attach.
+
 # collinear 3.0.0
 
 ## Breaking Changes

@@ -1,7 +1,7 @@
-1c271409b9f204a4670dd60358b4d9c2 *DESCRIPTION
+11be343449255d0d16d00c0304edc95c *DESCRIPTION
 a8330f38a0f7557dff1eb472988d0d83 *LICENSE
-a05dc0b8732b25a497f9e455b5378567 *NAMESPACE
-abd203875a814112dd37a16cbef0efe0 *NEWS.md
+a58d14b7e51b972332c2a85cb91ad70b *NAMESPACE
+3f12a1641695920a141f07eb0f5a6b33 *NEWS.md
 55bc4b8ace14ffba90c899773fcf7421 *R/case_weights.R
 799957a6f0807b6195b521724320b122 *R/collinear.R
 f5edfcfa4aa053cd183f2aa86cb8be1a *R/collinear_select.R
@@ -35,7 +35,7 @@ d361ac1fe3599a49202ca95f125da4ba *R/globals.R
 87598c5bc4492bd9b55eae62a068c06c *R/identify_valid_variables.R
 704741714ec2e4400274dc943007fcc8 *R/identify_zero_variance_variables.R
 56eb10f08b1c848e7259bbcd79021202 *R/model_formula.R
-372da381969bcf437af0a965d7f4c365 *R/preference_order.R
+f29cb5983cdb66da47ef395d316f3a04 *R/preference_order.R
 2dfa5100fa022e60808851f66dda2f4b *R/print.collinear_output.R
 6b2db9d4eb9a2be01fbb5958dbaea222 *R/print.collinear_selection.R
 f3413de0332894725297066892e97a22 *R/score_auc.R
@@ -53,8 +53,8 @@ fe1e2ad5a36a499c933a76efc1a77d26 *R/validate_arg_df_not_null.R
 82ec044d2f9572a35193d817b96a7231 *R/validate_arg_encoding_method.R
 9ad0e9a14ed0dbbc91cd1f2e52fdca0c *R/validate_arg_f.R
 114accc110ab45be01faab1a1ad3aa29 *R/validate_arg_function_name.R
-13f5968a62b03b5fa71f1e51fc3922a6 *R/validate_arg_max_cor.R
-4f2bf40e3d32acb17cd3e770cad9a073 *R/validate_arg_max_vif.R
+3e2526524c4e0747138d5c638974b56e *R/validate_arg_max_cor.R
+7b6a8d932e08b7e5c81f4598738c67e8 *R/validate_arg_max_vif.R
 2f0fb3348dd70bf6a6677a37e824f7ab *R/validate_arg_predictors.R
 6c5145f8f64472ef83eeb3e076fdc067 *R/validate_arg_preference_order.R
 d207484dbe3b4cc19b69b181f260e258 *R/validate_arg_quiet.R
